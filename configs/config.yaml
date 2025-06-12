@@ -1,0 +1,56 @@
+server:
+  host: "0.0.0.0"
+  port: 8443
+  read_timeout: "30s"
+  write_timeout: "30s"
+  tls:
+    enabled: false
+    cert_file: ""
+    key_file: ""
+  cors:
+    allow_origins: ["*"]
+    allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allow_headers: ["*"]
+
+# Database configuration - choose either SQLite or PostgreSQL
+database:
+  # For SQLite (default, no setup required)
+  type: "sqlite"
+  path: "./arrowhead.db"
+  
+  # For PostgreSQL (uncomment and configure)
+  # type: "postgres"
+  # host: "localhost"
+  # port: 5432
+  # username: "arrowhead"
+  # password: "arrowhead"
+  # name: "arrowhead"
+
+auth:
+  jwt_secret: "arrowhead-lite-secret-change-this-in-production"
+  token_duration: "24h"
+  private_key_file: ""
+  public_key_file: ""
+
+logging:
+  level: "warn"
+  format: "text"
+  file: ""
+
+health:
+  check_interval: "1m"
+  inactive_timeout: "5m"
+  cleanup_interval: "10m"
+
+# Gateway configuration for inter-cloud communication
+gateway:
+  enabled: false
+  cloud_id: "local-cloud"
+  # certificate_file: "/path/to/gateway.crt"
+  # private_key_file: "/path/to/gateway.key"
+  # trust_store: "/path/to/trust-anchors/"
+  # trust_anchors:
+  #   - cloud_id: "remote-cloud-1"
+  #     certificate_file: "/path/to/remote-cloud-1.crt"
+  #   - cloud_id: "remote-cloud-2"
+  #     certificate_file: "/path/to/remote-cloud-2.crt"

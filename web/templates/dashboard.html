@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}} - Interactive Dashboard</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar" id="sidebar">
+            <div class="logo">
+                <h1>🏹 Arrowhead</h1>
+                <p>Service Mesh Dashboard</p>
+            </div>
+            
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="#" class="nav-link active" data-view="dashboard">
+                        📊 Dashboard
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-view="nodes">
+                        🖥️ Nodes
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-view="services">
+                        ⚡ Services
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-view="auth-rules">
+                        🔐 Authorization Rules
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-view="events">
+                        📡 Events
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-view="network">
+                        🌐 Network Graph
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content" id="mainContent">
+            <!-- Header -->
+            <header class="header">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button class="menu-toggle" id="menuToggle">☰</button>
+                    <h1 class="page-title" id="pageTitle">Dashboard</h1>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" onclick="refreshData()">
+                        🔄 Refresh
+                    </button>
+                    <div id="connectionStatus" class="status-badge status-healthy">Connected</div>
+                </div>
+            </header>
+
+            <!-- Content Area -->
+            <div class="content-area">
+                <!-- Dashboard View -->
+                <div id="dashboardView" class="view">
+                    <div class="content-body">
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-value" id="totalNodes">{{if .metrics}}{{.metrics.TotalNodes}}{{else}}0{{end}}</div>
+                                <div class="stat-label">Total Nodes</div>
+                                <div class="stat-trend trend-up">↗ Active: <span id="activeNodes">{{if .metrics}}{{.metrics.ActiveNodes}}{{else}}0{{end}}</span></div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="totalServices">{{if .metrics}}{{.metrics.TotalServices}}{{else}}0{{end}}</div>
+                                <div class="stat-label">Total Services</div>
+                                <div class="stat-trend trend-up">↗ Active: <span id="activeServices">{{if .metrics}}{{.metrics.ActiveServices}}{{else}}0{{end}}</span></div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="totalEvents">{{if .metrics}}{{.metrics.TotalEvents}}{{else}}0{{end}}</div>
+                                <div class="stat-label">Total Events</div>
+                                <div class="stat-trend">📊 Recent Activity</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">{{if .health}}{{.health.health_percentage}}{{else}}0{{end}}%</div>
+                                <div class="stat-label">Health Score</div>
+                                <div class="stat-trend {{if and .health (gt .health.health_percentage 80)}}trend-up{{else}}trend-down{{end}}">
+                                    Status: <span class="status-badge status-{{if .health}}{{.health.status}}{{else}}unknown{{end}}">{{if .health}}{{.health.status}}{{else}}unknown{{end}}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+                            <div class="content-area">
+                                <div style="padding: 20px; border-bottom: 1px solid var(--border-color);">
+                                    <h3>Recent Activity</h3>
+                                </div>
+                                <div class="activity-feed" id="activityFeed">
+                                    <div class="loading">
+                                        <div class="spinner"></div>
+                                        Loading recent activity...
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="content-area">
+                                <div style="padding: 20px; border-bottom: 1px solid var(--border-color);">
+                                    <h3>Quick Actions</h3>
+                                </div>
+                                <div style="padding: 20px;">
+                                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                                        <button class="btn btn-primary" onclick="showAddModal('node')">
+                                            ➕ Add Node
+                                        </button>
+                                        <button class="btn btn-primary" onclick="showAddModal('service')">
+                                            ➕ Add Service
+                                        </button>
+                                        <button class="btn btn-primary" onclick="showAddModal('auth-rule')">
+                                            ➕ Add Auth Rule
+                                        </button>
+                                        <button class="btn btn-secondary" onclick="exportGraph()">
+                                            📊 Export Graph
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nodes View -->
+                <div id="nodesView" class="view hidden">
+                    <div class="view-controls">
+                        <div class="view-tabs">
+                            <div class="view-tab active" data-tab="list">📋 List View</div>
+                            <div class="view-tab" data-tab="graph">📊 Graph View</div>
+                        </div>
+                        <div class="filters">
+                            <input type="text" class="search-box" placeholder="Search nodes..." id="nodesSearch">
+                            <select class="filter-select" id="nodesFilter">
+                                <option value="">All Nodes</option>
+                                <option value="online">Online Only</option>
+                                <option value="offline">Offline Only</option>
+                            </select>
+                            <button class="btn btn-primary btn-sm" onclick="showAddModal('node')">
+                                ➕ Add Node
+                            </button>
+                        </div>
+                    </div>
+                    <div class="content-body">
+                        <div id="nodesListView">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                Loading nodes...
+                            </div>
+                        </div>
+                        <div id="nodesGraphView" class="hidden">
+                            <div class="graph-container" id="nodesGraph"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Services View -->
+                <div id="servicesView" class="view hidden">
+                    <div class="view-controls">
+                        <div class="view-tabs">
+                            <div class="view-tab active" data-tab="list">📋 List View</div>
+                            <div class="view-tab" data-tab="graph">📊 Graph View</div>
+                        </div>
+                        <div class="filters">
+                            <input type="text" class="search-box" placeholder="Search services..." id="servicesSearch">
+                            <select class="filter-select" id="servicesFilter">
+                                <option value="">All Services</option>
+                                <option value="active">Active Only</option>
+                                <option value="inactive">Inactive Only</option>
+                            </select>
+                            <button class="btn btn-primary btn-sm" onclick="showAddModal('service')">
+                                ➕ Add Service
+                            </button>
+                        </div>
+                    </div>
+                    <div class="content-body">
+                        <div id="servicesListView">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                Loading services...
+                            </div>
+                        </div>
+                        <div id="servicesGraphView" class="hidden">
+                            <div class="graph-container" id="servicesGraph"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Authorization Rules View -->
+                <div id="authRulesView" class="view hidden">
+                    <div class="view-controls">
+                        <div class="view-tabs">
+                            <div class="view-tab active" data-tab="list">📋 List View</div>
+                            <div class="view-tab" data-tab="graph">📊 Graph View</div>
+                        </div>
+                        <div class="filters">
+                            <input type="text" class="search-box" placeholder="Search auth rules..." id="authRulesSearch">
+                            <button class="btn btn-primary btn-sm" onclick="showAddModal('auth-rule')">
+                                ➕ Add Auth Rule
+                            </button>
+                        </div>
+                    </div>
+                    <div class="content-body">
+                        <div id="authRulesListView">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                Loading authorization rules...
+                            </div>
+                        </div>
+                        <div id="authRulesGraphView" class="hidden">
+                            <div class="graph-container" id="authRulesGraph"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Events View -->
+                <div id="eventsView" class="view hidden">
+                    <div class="view-controls">
+                        <div class="filters">
+                            <input type="text" class="search-box" placeholder="Search events..." id="eventsSearch">
+                            <select class="filter-select" id="eventsFilter">
+                                <option value="">All Events</option>
+                                <option value="publish">Published</option>
+                                <option value="subscribe">Subscriptions</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="content-body">
+                        <div id="eventsListView">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                Loading events...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Network Graph View -->
+                <div id="networkView" class="view hidden">
+                    <div class="view-controls">
+                        <div class="filters">
+                            <select class="filter-select" id="networkFilter">
+                                <option value="all">Show All</option>
+                                <option value="nodes">Nodes Only</option>
+                                <option value="services">Services Only</option>
+                                <option value="auth">Authorization Only</option>
+                            </select>
+                            <button class="btn btn-secondary btn-sm" onclick="exportGraph()">
+                                📷 Export Graph
+                            </button>
+                        </div>
+                    </div>
+                    <div class="content-body">
+                        <div class="graph-container" id="networkGraph"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div id="addModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add Item</h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <form id="addForm">
+                <div id="formFields"></div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Confirm Action</h2>
+                <span class="close" onclick="closeConfirmModal()">&times;</span>
+            </div>
+            <div id="confirmMessage"></div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmButton">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/core.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/views.js"></script>
+    <script src="/static/js/network.js"></script>
+    <script src="/static/js/auth.js"></script>
+</body>

@@ -1,0 +1,141 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: arrowhead-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=arrowhead
+      - POSTGRES_USER=arrowhead
+      - POSTGRES_PASSWORD=arrowhead
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - arrowhead-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arrowhead"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: arrowhead-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "1883:1883"     # MQTT
+      - "15675:15675"   # MQTT WebSocket
+      - "15672:15672"   # Management UI
+      - "5672:5672"     # AMQP (optional)
+    environment:
+      - RABBITMQ_DEFAULT_USER=arrowhead
+      - RABBITMQ_DEFAULT_PASS=arrowhead
+      - RABBITMQ_DEFAULT_VHOST=arrowhead
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - arrowhead-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    command: >
+      bash -c "
+        rabbitmq-plugins enable rabbitmq_mqtt rabbitmq_web_mqtt rabbitmq_management;
+        rabbitmq-server
+      "
+
+  arrowhead-lite:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: arrowhead-iot-mesh
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    volumes:
+      - ../configs:/app/configs:ro
+    environment:
+      - ARROWHEAD_SERVER_HOST=0.0.0.0
+      - ARROWHEAD_SERVER_PORT=8443
+      - ARROWHEAD_DATABASE_TYPE=postgres
+      - ARROWHEAD_DATABASE_HOST=postgres
+      - ARROWHEAD_DATABASE_PORT=5432
+      - ARROWHEAD_DATABASE_USERNAME=arrowhead
+      - ARROWHEAD_DATABASE_PASSWORD=arrowhead
+      - ARROWHEAD_DATABASE_NAME=arrowhead
+      - ARROWHEAD_LOGGING_LEVEL=info
+      - ARROWHEAD_LOGGING_FORMAT=json
+      - ARROWHEAD_AUTH_JWT_SECRET=your-super-secret-jwt-key-change-this
+      - ARROWHEAD_HEALTH_CHECK_INTERVAL=1m
+      - ARROWHEAD_HEALTH_INACTIVE_TIMEOUT=5m
+      - ARROWHEAD_HEALTH_CLEANUP_INTERVAL=10m
+    networks:
+      - arrowhead-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8443/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.arrowhead.rule=Host(`arrowhead.local`)"
+      - "traefik.http.services.arrowhead.loadbalancer.server.port=8443"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: arrowhead-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - arrowhead-network
+    depends_on:
+      - arrowhead-lite
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: arrowhead-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - arrowhead-network
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  arrowhead-network:
+    driver: bridge
