@@ -2,20 +2,26 @@ package auth
 
 import (
 	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
-	"fmt"
 	"time"
 
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/pkg"
-	"github.com/google/uuid"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/sirupsen/logrus"
 )
 
+// Claims represents JWT token claims
+type Claims struct {
+	SystemID   int    `json:"system_id,omitempty"`
+	SystemName string `json:"system_name,omitempty"`
+	IsAdmin    bool   `json:"is_admin,omitempty"`
+	AdminUser  string `json:"admin_user,omitempty"`
+	jwt.RegisteredClaims
+}
+
 type AuthManager struct {
-	db         Database
-	logger     *logrus.Logger
-	jwtSecret  []byte
+	db        Database
+	logger    *logrus.Logger
+	jwtSecret []byte
 	privateKey *rsa.PrivateKey
 	publicKey  *rsa.PublicKey
 }
@@ -29,275 +35,171 @@ func newAuthManager(db Database, logger *logrus.Logger, jwtSecret []byte) *AuthM
 }
 
 func (a *AuthManager) SetKeys(privateKeyPEM, publicKeyPEM []byte) error {
-	if privateKeyPEM != nil {
-		privateBlock, _ := pem.Decode(privateKeyPEM)
-		if privateBlock == nil {
-			return fmt.Errorf("failed to decode private key PEM")
-		}
-
-		privateKey, err := x509.ParsePKCS1PrivateKey(privateBlock.Bytes)
+	if len(privateKeyPEM) > 0 {
+		privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(privateKeyPEM)
 		if err != nil {
-			if key, err2 := x509.ParsePKCS8PrivateKey(privateBlock.Bytes); err2 == nil {
-				if rsaKey, ok := key.(*rsa.PrivateKey); ok {
-					privateKey = rsaKey
-				} else {
-					return fmt.Errorf("private key is not RSA")
-				}
-			} else {
-				return fmt.Errorf("failed to parse private key: %w", err)
-			}
+			return err
 		}
 		a.privateKey = privateKey
 	}
 
-	if publicKeyPEM != nil {
-		publicBlock, _ := pem.Decode(publicKeyPEM)
-		if publicBlock == nil {
-			return fmt.Errorf("failed to decode public key PEM")
-		}
-
-		publicKey, err := x509.ParsePKIXPublicKey(publicBlock.Bytes)
+	if len(publicKeyPEM) > 0 {
+		publicKey, err := jwt.ParseRSAPublicKeyFromPEM(publicKeyPEM)
 		if err != nil {
-			return fmt.Errorf("failed to parse public key: %w", err)
+			return err
 		}
-
-		if rsaKey, ok := publicKey.(*rsa.PublicKey); ok {
-			a.publicKey = rsaKey
-		} else {
-			return fmt.Errorf("public key is not RSA")
-		}
+		a.publicKey = publicKey
 	}
 
 	return nil
 }
 
-func (a *AuthManager) CreateAuthRule(req *pkg.AuthRequest) (*pkg.AuthRule, error) {
-	consumer, err := a.db.GetNode(req.ConsumerID)
+// CreateAuthorization creates a new authorization rule using Arrowhead 4.x models
+func (a *AuthManager) CreateAuthorization(req *pkg.AddAuthorizationRequest) (*pkg.Authorization, error) {
+	// Validate consumer system exists
+	consumer, err := a.db.GetSystemByID(req.ConsumerID)
 	if err != nil {
-		a.logger.WithError(err).Error("Failed to get consumer node")
+		a.logger.WithError(err).Error("Failed to get consumer system")
 		return nil, pkg.DatabaseError(err)
 	}
 	if consumer == nil {
-		return nil, pkg.NotFoundError("Consumer node not found")
+		return nil, pkg.NotFoundError("Consumer system not found")
 	}
 
-	provider, err := a.db.GetNode(req.ProviderID)
+	// For now, just handle the first provider and service definition
+	// TODO: Handle multiple providers and service definitions
+	if len(req.ProviderIDs) == 0 || len(req.ServiceDefinitionIDs) == 0 {
+		return nil, pkg.BadRequestError("Provider IDs and Service Definition IDs are required")
+	}
+
+	providerID := req.ProviderIDs[0]
+	serviceDefinitionID := req.ServiceDefinitionIDs[0]
+
+	// Validate provider system exists
+	provider, err := a.db.GetSystemByID(providerID)
 	if err != nil {
-		a.logger.WithError(err).Error("Failed to get provider node")
+		a.logger.WithError(err).Error("Failed to get provider system")
 		return nil, pkg.DatabaseError(err)
 	}
 	if provider == nil {
-		return nil, pkg.NotFoundError("Provider node not found")
+		return nil, pkg.NotFoundError("Provider system not found")
 	}
 
-	service, err := a.db.GetService(req.ServiceID)
-	if err != nil {
-		a.logger.WithError(err).Error("Failed to get service")
-		return nil, pkg.DatabaseError(err)
-	}
-	if service == nil {
-		return nil, pkg.NotFoundError("Service not found")
-	}
-
-	if service.NodeID != req.ProviderID {
-		return nil, pkg.BadRequestError("Service does not belong to the specified provider")
-	}
-
-	existing, err := a.db.GetAuthRules(req.ConsumerID, req.ProviderID, req.ServiceID)
-	if err != nil {
-		a.logger.WithError(err).Error("Failed to check existing auth rules")
-		return nil, pkg.DatabaseError(err)
-	}
-
-	if len(existing) > 0 {
-		return nil, pkg.ConflictError("Authorization rule already exists")
+	// Create authorization record using the full structures
+	now := time.Now()
+	authorization := &pkg.Authorization{
+		ConsumerSystem: *consumer,
+		ProviderSystem: pkg.Provider{
+			ID:                 provider.ID,
+			SystemName:         provider.SystemName,
+			Address:            provider.Address,
+			Port:               provider.Port,
+			AuthenticationInfo: provider.AuthenticationInfo,
+			CreatedAt:          provider.CreatedAt,
+			UpdatedAt:          provider.UpdatedAt,
+		},
+		ServiceDefinition: pkg.ServiceDefinition{
+			ID: serviceDefinitionID, // Will need to fetch this properly
+		},
+		CreatedAt: &now,
+		UpdatedAt: &now,
 	}
 
-	rule := &pkg.AuthRule{
-		ID:         uuid.New().String(),
-		ConsumerID: req.ConsumerID,
-		ProviderID: req.ProviderID,
-		ServiceID:  req.ServiceID,
-		CreatedAt:  time.Now(),
-	}
-
-	if err := a.db.CreateAuthRule(rule); err != nil {
-		a.logger.WithError(err).Error("Failed to create auth rule")
+	if err := a.db.CreateAuthorization(authorization); err != nil {
+		a.logger.WithError(err).Error("Failed to create authorization")
 		return nil, pkg.DatabaseError(err)
 	}
 
 	a.logger.WithFields(logrus.Fields{
-		"rule_id":     rule.ID,
-		"consumer_id": rule.ConsumerID,
-		"provider_id": rule.ProviderID,
-		"service_id":  rule.ServiceID,
-	}).Info("Authorization rule created successfully")
+		"consumer_id":           req.ConsumerID,
+		"provider_id":           providerID,
+		"service_definition_id": serviceDefinitionID,
+	}).Info("Authorization created")
 
-	return rule, nil
+	return authorization, nil
 }
 
-func (a *AuthManager) DeleteAuthRule(ruleID string) error {
-	existing, err := a.db.GetAuthRule(ruleID)
+// AuthorizeServiceAccess checks if a consumer is authorized to access a service
+func (a *AuthManager) AuthorizeServiceAccess(consumerID int, service *pkg.Service) (bool, error) {
+	// Check authorization
+	authorized, err := a.CheckAuthorization(consumerID, service.Provider.ID, service.ServiceDefinition.ID)
 	if err != nil {
-		a.logger.WithError(err).Error("Failed to get auth rule")
-		return pkg.DatabaseError(err)
-	}
-
-	if existing == nil {
-		return pkg.NotFoundError("Authorization rule not found")
-	}
-
-	if err := a.db.DeleteAuthRule(ruleID); err != nil {
-		a.logger.WithError(err).Error("Failed to delete auth rule")
-		return pkg.DatabaseError(err)
-	}
-
-	a.logger.WithField("rule_id", ruleID).Info("Authorization rule deleted successfully")
-
-	return nil
-}
-
-func (a *AuthManager) ListAuthRules() ([]*pkg.AuthRule, error) {
-	rules, err := a.db.ListAuthRules()
-	if err != nil {
-		a.logger.WithError(err).Error("Failed to list auth rules")
-		return nil, pkg.DatabaseError(err)
-	}
-
-	return rules, nil
-}
-
-func (a *AuthManager) ListAuthRulesWithNames() ([]*pkg.AuthRuleWithNames, error) {
-	rules, err := a.db.ListAuthRules()
-	if err != nil {
-		a.logger.WithError(err).Error("Failed to list auth rules")
-		return nil, pkg.DatabaseError(err)
-	}
-
-	var rulesWithNames []*pkg.AuthRuleWithNames
-	for _, rule := range rules {
-		ruleWithNames := &pkg.AuthRuleWithNames{
-			ID:         rule.ID,
-			ConsumerID: rule.ConsumerID,
-			ProviderID: rule.ProviderID,
-			ServiceID:  rule.ServiceID,
-			CreatedAt:  rule.CreatedAt,
-		}
-
-		// Get consumer name
-		if consumer, err := a.db.GetNode(rule.ConsumerID); err == nil && consumer != nil {
-			ruleWithNames.ConsumerName = consumer.Name
-		} else {
-			ruleWithNames.ConsumerName = "Unknown"
-		}
-
-		// Get provider name
-		if provider, err := a.db.GetNode(rule.ProviderID); err == nil && provider != nil {
-			ruleWithNames.ProviderName = provider.Name
-		} else {
-			ruleWithNames.ProviderName = "Unknown"
-		}
-
-		// Get service name
-		if service, err := a.db.GetService(rule.ServiceID); err == nil && service != nil {
-			ruleWithNames.ServiceName = service.Name
-		} else {
-			ruleWithNames.ServiceName = "Unknown"
-		}
-
-		rulesWithNames = append(rulesWithNames, ruleWithNames)
-	}
-
-	return rulesWithNames, nil
-}
-
-func (a *AuthManager) CheckAuthorization(consumerID, providerID, serviceID string) (bool, error) {
-	rules, err := a.db.GetAuthRules(consumerID, providerID, serviceID)
-	if err != nil {
-		a.logger.WithError(err).Error("Failed to check authorization")
-		return false, pkg.DatabaseError(err)
-	}
-
-	return len(rules) > 0, nil
-}
-
-func (a *AuthManager) AuthorizeServiceAccess(consumerID, serviceID string) (*pkg.ServiceResponse, error) {
-	service, err := a.db.GetService(serviceID)
-	if err != nil {
-		a.logger.WithError(err).Error("Failed to get service for authorization")
-		return nil, pkg.DatabaseError(err)
-	}
-
-	if service == nil {
-		return nil, pkg.NotFoundError("Service not found")
-	}
-
-	provider, err := a.db.GetNode(service.NodeID)
-	if err != nil {
-		a.logger.WithError(err).Error("Failed to get provider node")
-		return nil, pkg.DatabaseError(err)
-	}
-
-	if provider == nil {
-		return nil, pkg.NotFoundError("Provider node not found")
-	}
-
-	authorized, err := a.CheckAuthorization(consumerID, service.NodeID, serviceID)
-	if err != nil {
-		return nil, err
+		a.logger.WithError(err).WithFields(logrus.Fields{
+			"consumer_id": consumerID,
+			"service_id":  service.ID,
+		}).Error("Failed to check authorization")
+		return false, err
 	}
 
 	if !authorized {
-		return nil, pkg.ForbiddenError("Access denied: no authorization rule found")
+		a.logger.WithFields(logrus.Fields{
+			"consumer_id": consumerID,
+			"service_id":  service.ID,
+		}).Warn("Access denied: no authorization rule found")
+		return false, nil
 	}
 
-	accessToken, err := a.GenerateAccessToken(consumerID)
-	if err != nil {
-		a.logger.WithError(err).Error("Failed to generate access token")
-		accessToken = ""
-	}
-
-	endpoint := fmt.Sprintf("https://%s:%d%s", provider.Address, provider.Port, service.URI)
-
-	response := &pkg.ServiceResponse{
-		Service:     *service,
-		Node:        *provider,
-		AccessToken: accessToken,
-		Endpoint:    endpoint,
-		Authorization: map[string]string{
-			"type":  "Bearer",
-			"token": accessToken,
-		},
-		Metadata: service.Metadata,
-	}
-
-	a.logger.WithFields(logrus.Fields{
-		"consumer_id": consumerID,
-		"service_id":  serviceID,
-		"provider_id": service.NodeID,
-	}).Info("Service access authorized")
-
-	return response, nil
+	return true, nil
 }
 
-func (a *AuthManager) VerifyCertificate(certPEM []byte) (string, error) {
-	block, _ := pem.Decode(certPEM)
-	if block == nil {
-		return "", fmt.Errorf("failed to decode certificate PEM")
+// CheckAuthorization checks if consumer is authorized to access provider's service
+func (a *AuthManager) CheckAuthorization(consumerID, providerID, serviceDefinitionID int) (bool, error) {
+	return a.db.CheckAuthorization(consumerID, providerID, serviceDefinitionID, []int{})
+}
+
+// DeleteAuthorization removes an authorization rule
+func (a *AuthManager) DeleteAuthorization(authorizationID int) error {
+	return a.db.DeleteAuthorizationByID(authorizationID)
+}
+
+// ListAuthorizations returns all authorization rules
+func (a *AuthManager) ListAuthorizations() ([]pkg.Authorization, error) {
+	return a.db.ListAuthorizations("id", "ASC")
+}
+
+// GenerateServiceToken creates a JWT token for service access (public method)
+func (a *AuthManager) GenerateServiceToken(consumerID, providerID, serviceID int) (string, error) {
+	return a.generateServiceToken(consumerID, providerID, serviceID)
+}
+
+// generateServiceToken creates a JWT token for service access
+func (a *AuthManager) generateServiceToken(consumerID, providerID, serviceID int) (string, error) {
+	if a.privateKey == nil {
+		return "", pkg.ConfigurationError("auth manager is not configured with a private key for JWT signing")
 	}
 
-	cert, err := x509.ParseCertificate(block.Bytes)
+	claims := jwt.MapClaims{
+		"sub":         consumerID,
+		"provider_id": providerID,
+		"service_id":  serviceID,
+		"iat":         time.Now().Unix(),
+		"exp":         time.Now().Add(1 * time.Hour).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	return token.SignedString(a.privateKey)
+}
+
+// ValidateToken validates a JWT token
+func (a *AuthManager) ValidateToken(tokenString string) (*Claims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (any, error) {
+		// Check that the token's signing method is what you expect
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, pkg.UnauthorizedError("unexpected signing method: " + token.Header["alg"].(string))
+		}
+		if a.publicKey == nil {
+			return nil, pkg.ConfigurationError("auth manager is not configured with a public key for JWT validation")
+		}
+		return a.publicKey, nil
+	})
+
 	if err != nil {
-		return "", fmt.Errorf("failed to parse certificate: %w", err)
+		return nil, pkg.UnauthorizedError("Invalid token: " + err.Error())
 	}
 
-	if time.Now().After(cert.NotAfter) {
-		return "", fmt.Errorf("certificate has expired")
+	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+		return claims, nil
 	}
 
-	if time.Now().Before(cert.NotBefore) {
-		return "", fmt.Errorf("certificate is not yet valid")
-	}
-
-	return cert.Subject.CommonName, nil
+	return nil, pkg.UnauthorizedError("Invalid token claims")
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"net/http"
@@ -11,8 +12,13 @@ import (
 	"syscall"
 	"time"
 
-	"git.ri.se/eu-cop-pilot/arrowhead-lite/api"
+	handlers "git.ri.se/eu-cop-pilot/arrowhead-lite/api"
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal"
+	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/auth"
+	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/ca"
+	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/database"
+	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/orchestration"
+	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/registry"
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/pkg"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -57,37 +63,28 @@ func main() {
 		}
 	}
 
-	db, err := internal.NewStorage(cfg.Database.Type, connectionString)
+	db, err := database.NewStorage(cfg.Database.Type, connectionString)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to initialize database")
 	}
 	defer db.Close()
 
-	registry := internal.NewRegistry(db, logger)
+	registryService := registry.NewRegistry(db, logger)
 
-	authManager := internal.NewAuthManager(db, logger, []byte(cfg.Auth.JWTSecret))
+	authManager := auth.NewAuthManager(db, logger, []byte(cfg.Auth.JWTSecret))
 	if err := setupAuthKeys(authManager, cfg.Auth); err != nil {
 		logger.WithError(err).Warn("Failed to setup auth keys, using JWT secrets only")
 	}
 
-	orchestrator := internal.NewOrchestrator(db, logger)
-	eventManager := internal.NewEventManager(db, logger)
-	healthChecker := internal.NewHealthChecker(registry, logger, cfg.Health.CheckInterval, cfg.Health.InactiveTimeout, cfg.Health.CleanupInterval)
+	orchestratorService := orchestration.NewOrchestrator(db, authManager, logger)
 
-	// Create Gateway components
-	relayManager := internal.NewRelayManager(db, cfg, logger)
-	gatewaySecurityManager, err := internal.NewGatewaySecurityManager(cfg, logger)
+	// Create Certificate Authority
+	certificateAuthority, err := ca.NewCertificateAuthority("", "", "arrowhead123", logger)
 	if err != nil {
-		logger.WithError(err).Warn("Failed to initialize gateway security manager")
+		logger.WithError(err).Warn("Failed to initialize certificate authority")
 	}
-	gatewayManager := internal.NewGatewayManager(db, cfg, logger, relayManager, gatewaySecurityManager)
 
-	defer eventManager.Close()
-	defer healthChecker.Close()
-	defer relayManager.Shutdown()
-	defer gatewayManager.Shutdown()
-
-	router := setupRouter(cfg, registry, authManager, orchestrator, eventManager, healthChecker, gatewayManager, relayManager, logger)
+	router := setupRouter(cfg, registryService, authManager, orchestratorService, certificateAuthority, logger)
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
@@ -97,8 +94,20 @@ func main() {
 	}
 
 	if cfg.Server.TLS.Enabled {
+		// Load CA certificates for mTLS verification
+		caCertPool, err := loadTrustStore(cfg.Server.TLS.TruststoreFile)
+		if err != nil {
+			logger.WithError(err).Fatal("Failed to load truststore, mTLS cannot be enforced.")
+		}
+		
+		// The server's certificate doesn't need to be loaded separately here if we use ListenAndServeTLS,
+		// but the tls.Config is the right place for all other settings.
+		
 		tlsConfig := &tls.Config{
-			MinVersion: tls.VersionTLS12,
+			// Certificates will be loaded by ListenAndServeTLS from the config file paths.
+			MinVersion:   tls.VersionTLS12,
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			ClientCAs:    caCertPool,
 		}
 		server.TLSConfig = tlsConfig
 
@@ -111,6 +120,7 @@ func main() {
 		}).Info("Starting HTTPS server")
 
 		go func() {
+			// ListenAndServeTLS will use the server.TLSConfig and load the certs from the files.
 			if err := server.ListenAndServeTLS(cfg.Server.TLS.CertFile, cfg.Server.TLS.KeyFile); err != nil && err != http.ErrServerClosed {
 				logger.WithError(err).Fatal("Failed to start HTTPS server")
 			}
@@ -175,7 +185,7 @@ func setupLogger(cfg internal.LoggingConfig) *logrus.Logger {
 }
 
 // Sets up the public and private authentication keys for the AuthManager.
-func setupAuthKeys(authManager *internal.AuthManager, cfg internal.AuthConfig) error {
+func setupAuthKeys(authManager *auth.AuthManager, cfg internal.AuthConfig) error {
 	var privateKeyPEM, publicKeyPEM []byte
 	var err error
 
@@ -199,13 +209,10 @@ func setupAuthKeys(authManager *internal.AuthManager, cfg internal.AuthConfig) e
 // Initializes the Gin router with all routes and middleware.
 func setupRouter(
 	cfg *internal.Config,
-	registryService *internal.Registry,
-	authManager *internal.AuthManager,
-	orchestratorService *internal.Orchestrator,
-	eventManager *internal.EventManager,
-	healthChecker *internal.HealthChecker,
-	gatewayManager *internal.GatewayManager,
-	relayManager *internal.RelayManager,
+	registryService *registry.Registry,
+	authManager *auth.AuthManager,
+	orchestratorService *orchestration.Orchestrator,
+	certificateAuthority *ca.CertificateAuthority,
 	logger *logrus.Logger,
 ) *gin.Engine {
 	if cfg.Logging.Level != "debug" {
@@ -224,74 +231,97 @@ func setupRouter(
 	}
 	router.Use(cors.New(corsConfig))
 
-	h := handlers.New(registryService, authManager, orchestratorService, eventManager, gatewayManager, relayManager, logger)
+	h := handlers.New(registryService, authManager, orchestratorService, certificateAuthority, logger)
 
 	router.GET("/health", h.HealthCheck)
-	router.GET("/api/v1/health", h.GetDetailedHealth)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	api := router.Group("/api/v1")
-
-	registry := api.Group("/registry")
+	// Arrowhead 4.x compatible endpoints (no /api/v1 prefix)
+	// Service Registry endpoints
+	serviceRegistry := router.Group("/serviceregistry")
 	{
-		registry.POST("/nodes", h.RegisterNode)
-		registry.DELETE("/nodes/:id", h.AuthMiddleware(), h.UnregisterNode)
-		registry.GET("/nodes/:id", h.GetNode)
-		registry.GET("/nodes", h.ListNodes)
+		// Management API endpoints
+		mgmt := serviceRegistry.Group("/mgmt")
+		{
+			// All system-related endpoints are under /systems
+			systems := mgmt.Group("/systems")
+			{
+				// Public read-only routes
+				systems.GET("", h.ListSystems)
+				systems.GET("/:id", h.GetSystemByID)
+				
+				// Authenticated write routes
+				if cfg.Server.TLS.Enabled {
+					systems.POST("", h.AuthMiddleware(), h.RegisterSystem)
+					systems.DELETE("/:id", h.AuthMiddleware(), h.UnregisterSystemByID)
+				} else {
+					systems.POST("", h.RegisterSystem)
+					systems.DELETE("/:id", h.UnregisterSystemByID)
+				}
+			}
 
-		registry.POST("/services", h.AuthMiddleware(), h.RegisterService)
-		registry.DELETE("/services/:id", h.AuthMiddleware(), h.UnregisterService)
-		registry.GET("/services/:id", h.GetService)
-		registry.GET("/services", h.ListServices)
-
-		registry.POST("/heartbeat", h.AuthMiddleware(), h.UpdateNodeHeartbeat)
+			// All service-related endpoints are under /services
+			services := mgmt.Group("/services")
+			{
+				// Public read-only routes
+				services.GET("", h.ListServices)
+				services.GET("/:id", h.GetServiceByID)
+				
+				// Authenticated write routes
+				if cfg.Server.TLS.Enabled {
+					services.POST("", h.AuthMiddleware(), h.RegisterServiceMgmt)
+					services.DELETE("/:id", h.AuthMiddleware(), h.UnregisterServiceByID)
+				} else {
+					services.POST("", h.RegisterServiceMgmt)
+					services.DELETE("/:id", h.UnregisterServiceByID)
+				}
+			}
+		}
+		
+		// Public registration endpoints
+		serviceRegistry.POST("/register-system", h.RegisterSystemPublic)
+		serviceRegistry.DELETE("/unregister-system", h.UnregisterSystemPublic)
+		
+		// Apply authentication middleware conditionally for service registration
+		if cfg.Server.TLS.Enabled {
+			serviceRegistry.POST("/register", h.AuthMiddleware(), h.RegisterService)
+			serviceRegistry.DELETE("/unregister", h.AuthMiddleware(), h.UnregisterService)
+		} else {
+			serviceRegistry.POST("/register", h.RegisterService)
+			serviceRegistry.DELETE("/unregister", h.UnregisterService)
+		}
 	}
 
-	authRoutes := api.Group("/auth")
+	// Authorization endpoints
+	authorization := router.Group("/authorization")
 	{
-		authRoutes.POST("/rules", h.AuthMiddleware(), h.CreateAuthRule)
-		authRoutes.DELETE("/rules/:id", h.AuthMiddleware(), h.DeleteAuthRule)
-		authRoutes.GET("/rules", h.ListAuthRules)
-		authRoutes.POST("/token", h.AuthMiddleware(), h.GenerateToken)
-		authRoutes.POST("/admin", h.AdminLogin) // Admin login - no auth required
-		authRoutes.POST("/login", h.Login)      // Legacy node login - no auth required
+		authMgmt := authorization.Group("/mgmt")
+		{
+			// Apply authentication middleware conditionally based on TLS configuration
+			if cfg.Server.TLS.Enabled {
+				authMgmt.POST("/intracloud", h.AuthMiddleware(), h.AddAuthorization)
+				authMgmt.DELETE("/intracloud/:id", h.AuthMiddleware(), h.RemoveAuthorization)
+			} else {
+				authMgmt.POST("/intracloud", h.AddAuthorization)
+				authMgmt.DELETE("/intracloud/:id", h.RemoveAuthorization)
+			}
+			
+			// Public, read-only routes
+			authMgmt.GET("/intracloud", h.ListAuthorizations)
+		}
 	}
 
-	orchestrationRoutes := api.Group("/orchestration")
+	// Orchestrator endpoints
+	orchestrator := router.Group("/orchestrator")
 	{
-		orchestrationRoutes.POST("/", h.AuthMiddleware(), h.Orchestrate)
-		orchestrationRoutes.GET("/recommendations/:node_id", h.GetServiceRecommendations)
-		orchestrationRoutes.GET("/health/:service_id", h.AnalyzeServiceHealth)
+		// Apply authentication middleware conditionally based on TLS configuration
+		if cfg.Server.TLS.Enabled {
+			orchestrator.POST("/orchestration", h.AuthMiddleware(), h.Orchestrate)
+		} else {
+			orchestrator.POST("/orchestration", h.Orchestrate)
+		}
 	}
 
-	eventsRoutes := api.Group("/events")
-	{
-		eventsRoutes.POST("/publish", h.AuthMiddleware(), h.PublishEvent)
-		eventsRoutes.POST("/subscribe", h.AuthMiddleware(), h.Subscribe)
-		eventsRoutes.DELETE("/subscribe/:id", h.AuthMiddleware(), h.Unsubscribe)
-		eventsRoutes.GET("/", h.ListEvents)
-		eventsRoutes.GET("/subscriptions", h.ListSubscriptions)
-	}
-
-	gatewayRoutes := api.Group("/gateway")
-	{
-		gatewayRoutes.POST("/", h.AuthMiddleware(), h.RegisterGateway)
-		gatewayRoutes.GET("/", h.ListGateways)
-		gatewayRoutes.GET("/:id", h.GetGateway)
-
-		gatewayRoutes.POST("/:id/tunnels", h.AuthMiddleware(), h.CreateTunnel)
-		gatewayRoutes.GET("/:id/tunnels", h.ListTunnels)
-
-		gatewayRoutes.POST("/tunnels/:tunnel_id/sessions", h.AuthMiddleware(), h.CreateGatewaySession)
-		gatewayRoutes.DELETE("/sessions/:session_id", h.AuthMiddleware(), h.CloseGatewaySession)
-		gatewayRoutes.GET("/sessions/:token/validate", h.ValidateGatewaySession)
-
-		gatewayRoutes.POST("/:id/relay", h.AuthMiddleware(), h.CreateRelayConnection)
-		gatewayRoutes.POST("/route", h.AuthMiddleware(), h.RouteGatewayMessage)
-		gatewayRoutes.POST("/orchestrate", h.AuthMiddleware(), h.GatewayOrchestrate)
-	}
-
-	api.GET("/metrics", h.GetMetrics)
 
 	router.Static("/static", "./web/static")
 	router.LoadHTMLGlob("web/templates/*")
@@ -301,43 +331,37 @@ func setupRouter(
 		if err != nil {
 			logger.WithError(err).Error("Failed to get metrics")
 			metrics = &pkg.Metrics{
-				TotalNodes:     0,
-				ActiveNodes:    0,
+				TotalSystems:   0,
+				ActiveSystems:  0,
 				TotalServices:  0,
 				ActiveServices: 0,
-				TotalEvents:    0,
 			}
 		}
 
-		// Get nodes for health calculation
-		nodes, err := registryService.ListNodes()
+		// Get systems for health calculation
+		systems, err := registryService.ListSystems()
 		var health map[string]interface{}
 		if err != nil {
-			logger.WithError(err).Error("Failed to get nodes for health")
+			logger.WithError(err).Error("Failed to get systems for health")
 			health = map[string]interface{}{
 				"status":            "unknown",
 				"health_percentage": 0,
 				"health_ratio":      0.0,
 			}
 		} else {
-			totalNodes := len(nodes)
-			activeNodes := 0
-			for _, node := range nodes {
-				if node.Status == "online" {
-					activeNodes++
-				}
-			}
+			totalSystems := len(systems)
+			activeSystems := totalSystems // All registered systems are considered active in Arrowhead 4.x
 
 			var healthPercentage int
 			var healthRatio float64
 			var status string
-			if totalNodes == 0 {
+			if totalSystems == 0 {
 				healthPercentage = 100
 				healthRatio = 1.0
 				status = "healthy"
 			} else {
-				healthPercentage = (activeNodes * 100) / totalNodes
-				healthRatio = float64(activeNodes) / float64(totalNodes)
+				healthPercentage = (activeSystems * 100) / totalSystems
+				healthRatio = float64(activeSystems) / float64(totalSystems)
 				if healthPercentage >= 80 {
 					status = "healthy"
 				} else if healthPercentage >= 50 {
@@ -366,4 +390,23 @@ func setupRouter(
 	})
 
 	return router
+}
+
+// loadTrustStore loads CA certificates from a PEM file for mTLS verification
+func loadTrustStore(truststoreFile string) (*x509.CertPool, error) {
+	if truststoreFile == "" {
+		return nil, fmt.Errorf("truststore file not specified")
+	}
+	
+	caCert, err := os.ReadFile(truststoreFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read truststore file: %w", err)
+	}
+	
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		return nil, fmt.Errorf("failed to parse CA certificate from truststore")
+	}
+	
+	return caCertPool, nil
 }

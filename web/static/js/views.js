@@ -31,10 +31,9 @@ function showView(viewName) {
     // Update page title
     const titles = {
         'dashboard': 'Dashboard',
-        'nodes': 'Nodes',
+        'systems': 'Systems',
         'services': 'Services',
         'auth-rules': 'Authorization Rules',
-        'events': 'Events',
         'network': 'Network Graph'
     };
     document.getElementById('pageTitle').textContent = titles[viewName] || viewName;
@@ -43,17 +42,14 @@ function showView(viewName) {
 
     // Load view-specific data
     switch (viewName) {
-        case 'nodes':
-            loadNodes();
+        case 'systems':
+            loadSystems();
             break;
         case 'services':
             loadServices();
             break;
         case 'auth-rules':
             loadAuthRules();
-            break;
-        case 'events':
-            loadEvents();
             break;
         case 'network':
             loadNetworkGraph();
@@ -84,16 +80,16 @@ function switchTab(viewId, tabType) {
         listView.classList.add('hidden');
         graphView.classList.remove('hidden');
         // Load graph for this view
-        const viewType = viewId.replace('View', '').replace('s', ''); // nodes -> node
+        const viewType = viewId.replace('View', '').replace('s', ''); // systems -> system
         loadGraph(viewType);
     }
 }
 
-function displayNodes(nodes) {
-    const container = document.getElementById('nodesListView');
+function displaySystems(systems) {
+    const container = document.getElementById('systemsListView');
     
-    if (!nodes || nodes.length === 0) {
-        container.innerHTML = '<div class="empty-state"><i>🖥️</i><h3>No nodes found</h3><p>Register your first node to get started.</p></div>';
+    if (!systems || systems.length === 0) {
+        container.innerHTML = '<div class="empty-state"><i>🖥️</i><h3>No systems found</h3><p>Register your first system to get started.</p></div>';
         return;
     }
 
@@ -101,7 +97,7 @@ function displayNodes(nodes) {
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Name</th>
+                    <th>System Name</th>
                     <th>Address</th>
                     <th>Port</th>
                     <th>Status</th>
@@ -110,22 +106,22 @@ function displayNodes(nodes) {
                 </tr>
             </thead>
             <tbody>
-                ${nodes.map(node => `
+                ${systems.map(system => `
                     <tr>
                         <td>
                             <div class="name-with-id">
-                                <strong>${node.name || 'Unknown'}</strong>
-                                <small class="text-muted">${node.id}</small>
+                                <strong>${system.systemName || 'Unknown'}</strong>
+                                <small class="text-muted">ID: ${system.id}</small>
                             </div>
                         </td>
-                        <td>${node.address || 'N/A'}</td>
-                        <td>${node.port || 'N/A'}</td>
-                        <td><span class="status-badge status-${node.status || 'offline'}">${node.status || 'offline'}</span></td>
-                        <td>${formatDate(node.created_at)}</td>
+                        <td>${system.address || 'N/A'}</td>
+                        <td>${system.port || 'N/A'}</td>
+                        <td><span class="status-badge status-active">active</span></td>
+                        <td>${formatDate(system.createdAt)}</td>
                         <td>
                             <div class="actions">
-                                <button class="btn btn-secondary btn-sm" onclick="editItem('node', '${node.id}')">✏️</button>
-                                <button class="btn btn-danger btn-sm" onclick="deleteItem('node', '${node.id}', '${node.name}')">🗑️</button>
+                                <button class="btn btn-secondary btn-sm" onclick="editItem('system', '${system.id}')">✏️</button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteItem('system', '${system.id}', '${system.systemName}')">🗑️</button>
                             </div>
                         </td>
                     </tr>
@@ -149,11 +145,11 @@ function displayServices(services) {
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Node ID</th>
-                    <th>Definition</th>
+                    <th>Service Definition</th>
+                    <th>Provider System</th>
                     <th>URI</th>
-                    <th>Method</th>
+                    <th>Interfaces</th>
+                    <th>Security</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -163,19 +159,28 @@ function displayServices(services) {
                     <tr>
                         <td>
                             <div class="name-with-id">
-                                <strong>${service.name || 'Unknown'}</strong>
-                                <small class="text-muted">${service.id}</small>
+                                <strong>${service.serviceDefinition?.serviceDefinition || 'Unknown'}</strong>
+                                <small class="text-muted">ID: ${service.id}</small>
                             </div>
                         </td>
-                        <td>${service.node_id || 'N/A'}</td>
-                        <td>${service.definition || 'N/A'}</td>
-                        <td><code>${service.uri || 'N/A'}</code></td>
-                        <td><span class="status-badge">${service.method || 'GET'}</span></td>
-                        <td><span class="status-badge status-${service.status || 'inactive'}">${service.status || 'inactive'}</span></td>
+                        <td>
+                            <div class="name-with-id">
+                                <strong>${service.provider?.systemName || 'Unknown'}</strong>
+                                <small class="text-muted">${service.provider?.address}:${service.provider?.port}</small>
+                            </div>
+                        </td>
+                        <td><code>${service.serviceUri || 'N/A'}</code></td>
+                        <td>
+                            ${service.interfaces?.map(iface => 
+                                `<span class="status-badge">${iface.interfaceName}</span>`
+                            ).join(' ') || 'N/A'}
+                        </td>
+                        <td><span class="status-badge">${service.secure || 'NOT_SECURE'}</span></td>
+                        <td><span class="status-badge status-active">active</span></td>
                         <td>
                             <div class="actions">
                                 <button class="btn btn-secondary btn-sm" onclick="editItem('service', '${service.id}')">✏️</button>
-                                <button class="btn btn-danger btn-sm" onclick="deleteItem('service', '${service.id}', '${service.name}')">🗑️</button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteItem('service', '${service.id}', '${service.serviceDefinition?.serviceDefinition}')">🗑️</button>
                             </div>
                         </td>
                     </tr>
@@ -201,9 +206,10 @@ function displayAuthRules(rules) {
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Consumer</th>
-                    <th>Provider</th>
-                    <th>Service</th>
+                    <th>Consumer System</th>
+                    <th>Provider System</th>
+                    <th>Service Definition</th>
+                    <th>Interfaces</th>
                     <th>Created</th>
                     <th>Actions</th>
                 </tr>
@@ -213,23 +219,28 @@ function displayAuthRules(rules) {
                     <tr>
                         <td>
                             <div class="name-with-id">
-                                <strong>${rule.consumer_name || 'Unknown'}</strong>
-                                <small class="text-muted">${rule.consumer_id}</small>
+                                <strong>${rule.consumerSystem?.systemName || 'Unknown'}</strong>
+                                <small class="text-muted">ID: ${rule.consumerSystem?.id}</small>
                             </div>
                         </td>
                         <td>
                             <div class="name-with-id">
-                                <strong>${rule.provider_name || 'Unknown'}</strong>
-                                <small class="text-muted">${rule.provider_id}</small>
+                                <strong>${rule.providerSystem?.systemName || 'Unknown'}</strong>
+                                <small class="text-muted">ID: ${rule.providerSystem?.id}</small>
                             </div>
                         </td>
                         <td>
                             <div class="name-with-id">
-                                <strong>${rule.service_name || 'Unknown'}</strong>
-                                <small class="text-muted">${rule.service_id}</small>
+                                <strong>${rule.serviceDefinition?.serviceDefinition || 'Unknown'}</strong>
+                                <small class="text-muted">ID: ${rule.serviceDefinition?.id}</small>
                             </div>
                         </td>
-                        <td>${formatDate(rule.created_at)}</td>
+                        <td>
+                            ${rule.interfaces?.map(iface => 
+                                `<span class="status-badge">${iface.interfaceName}</span>`
+                            ).join(' ') || 'N/A'}
+                        </td>
+                        <td>${formatDate(rule.createdAt)}</td>
                         <td>
                             <div class="actions">
                                 <button class="btn btn-danger btn-sm" onclick="deleteItem('auth-rule', '${rule.id}', 'authorization rule')">🗑️</button>
@@ -247,45 +258,6 @@ function displayAuthRules(rules) {
     console.log('Container innerHTML after setting:', container.innerHTML.length, 'characters');
 }
 
-function displayEvents(events) {
-    const container = document.getElementById('eventsListView');
-    
-    if (!events || events.length === 0) {
-        container.innerHTML = '<div class="empty-state"><i>📡</i><h3>No events found</h3><p>Events will appear here when published or subscribed to.</p></div>';
-        return;
-    }
-
-    const table = `
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Type</th>
-                    <th>Topic</th>
-                    <th>Publisher ID</th>
-                    <th>Timestamp</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${events.map(event => `
-                    <tr>
-                        <td><span class="status-badge">${event.type || 'unknown'}</span></td>
-                        <td><strong>${event.topic || 'N/A'}</strong></td>
-                        <td>${event.publisher_id || 'Node'}</td>
-                        <td>${formatDate(event.created_at)}</td>
-                        <td>
-                            <div class="actions">
-                                <button class="btn btn-secondary btn-sm" onclick="viewEventDetails('${event.id}')">👁️</button>
-                            </div>
-                        </td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    `;
-    
-    container.innerHTML = table;
-}
 
 function filterData(view, searchTerm, filterValue) {
     // Implement filtering logic for each view
@@ -310,17 +282,14 @@ function filterData(view, searchTerm, filterValue) {
 
     // Update display
     switch (view) {
-        case 'nodes':
-            displayNodes(data);
+        case 'systems':
+            displaySystems(data);
             break;
         case 'services':
             displayServices(data);
             break;
         case 'authRules':
             displayAuthRules(data);
-            break;
-        case 'events':
-            displayEvents(data);
             break;
     }
 }
@@ -334,11 +303,11 @@ function showAddModal(type) {
     
     let fieldsHtml = '';
     switch (type) {
-        case 'node':
+        case 'system':
             fieldsHtml = `
                 <div class="form-group">
-                    <label class="form-label">Node Name *</label>
-                    <input type="text" class="form-input" name="name" required>
+                    <label class="form-label">System Name *</label>
+                    <input type="text" class="form-input" name="systemName" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Address *</label>
@@ -348,70 +317,71 @@ function showAddModal(type) {
                     <label class="form-label">Port *</label>
                     <input type="number" class="form-input" name="port" min="1" max="65535" required>
                 </div>
+                <div class="form-group">
+                    <label class="form-label">Authentication Info</label>
+                    <input type="text" class="form-input" name="authenticationInfo" placeholder="Optional">
+                </div>
             `;
             break;
         case 'service':
             fieldsHtml = `
                 <div class="form-group">
-                    <label class="form-label">Service Name *</label>
-                    <input type="text" class="form-input" name="name" required>
+                    <label class="form-label">Service Definition *</label>
+                    <input type="text" class="form-input" name="serviceDefinition" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Node *</label>
-                    <select class="form-input" name="node_id" required>
-                        <option value="">Select a node</option>
-                        ${currentData.nodes.map(node => 
-                            `<option value="${node.id}">${node.name}</option>`
-                        ).join('')}
+                    <label class="form-label">Provider System Name *</label>
+                    <input type="text" class="form-input" name="providerSystemName" placeholder="System that provides this service" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Service URI *</label>
+                    <input type="text" class="form-input" name="serviceUri" placeholder="/api/endpoint" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Security Level</label>
+                    <select class="form-input" name="secure">
+                        <option value="NOT_SECURE">Not Secure</option>
+                        <option value="CERTIFICATE">Certificate</option>
+                        <option value="TOKEN">Token</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Definition *</label>
-                    <input type="text" class="form-input" name="definition" required>
+                    <label class="form-label">Interfaces</label>
+                    <input type="text" class="form-input" name="interfaces" value="HTTP-SECURE-JSON" placeholder="Comma-separated list">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">URI *</label>
-                    <input type="text" class="form-input" name="uri" placeholder="/api/endpoint" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Method</label>
-                    <select class="form-input" name="method">
-                        <option value="GET">GET</option>
-                        <option value="POST">POST</option>
-                        <option value="PUT">PUT</option>
-                        <option value="DELETE">DELETE</option>
-                    </select>
+                    <label class="form-label">Version</label>
+                    <input type="text" class="form-input" name="version" value="1">
                 </div>
             `;
             break;
         case 'auth-rule':
             fieldsHtml = `
                 <div class="form-group">
-                    <label class="form-label">Consumer Node *</label>
-                    <select class="form-input" name="consumer_id" required>
-                        <option value="">Select consumer</option>
-                        ${currentData.nodes.map(node => 
-                            `<option value="${node.id}">${node.name}</option>`
+                    <label class="form-label">Consumer System *</label>
+                    <select class="form-input" name="consumerId" required>
+                        <option value="">Select consumer system</option>
+                        ${(currentData.systems || []).map(system => 
+                            `<option value="${system.id}">${system.systemName}</option>`
                         ).join('')}
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Provider Node *</label>
-                    <select class="form-input" name="provider_id" required>
-                        <option value="">Select provider</option>
-                        ${currentData.nodes.map(node => 
-                            `<option value="${node.id}">${node.name}</option>`
+                    <label class="form-label">Provider System *</label>
+                    <select class="form-input" name="providerId" required>
+                        <option value="">Select provider system</option>
+                        ${(currentData.systems || []).map(system => 
+                            `<option value="${system.id}">${system.systemName}</option>`
                         ).join('')}
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Service</label>
-                    <select class="form-input" name="service_id">
-                        <option value="">Any service</option>
-                        ${currentData.services.map(service => 
-                            `<option value="${service.id}">${service.name}</option>`
-                        ).join('')}
-                    </select>
+                    <label class="form-label">Service Definition ID *</label>
+                    <input type="number" class="form-input" name="serviceDefinitionId" placeholder="Service Definition ID" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Interface IDs</label>
+                    <input type="text" class="form-input" name="interfaceIds" value="1" placeholder="Comma-separated list of interface IDs">
                 </div>
             `;
             break;
@@ -451,9 +421,6 @@ function editItem(type, id) {
     console.log('Edit functionality coming soon for', type, id);
 }
 
-function viewEventDetails(id) {
-    console.log('Event details view coming soon for event', id);
-}
 
 function exportGraph() {
     const canvas = document.querySelector('#networkGraph canvas');

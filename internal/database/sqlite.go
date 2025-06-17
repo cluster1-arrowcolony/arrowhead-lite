@@ -30,267 +30,200 @@ func NewSQLiteDB(connection string) (*SQLite, error) {
 
 func (s *SQLite) initSchema() error {
 	schema := `
-	CREATE TABLE IF NOT EXISTS nodes (
-		id TEXT PRIMARY KEY,
-		name TEXT UNIQUE NOT NULL,
+	-- Arrowhead 4.x Systems table
+	CREATE TABLE IF NOT EXISTS systems (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		system_name TEXT UNIQUE NOT NULL,
 		address TEXT NOT NULL,
 		port INTEGER NOT NULL,
-		certificate TEXT,
-		certificate_hash TEXT,
+		authentication_info TEXT,
 		metadata TEXT,
-		status TEXT NOT NULL DEFAULT 'online',
 		created_at DATETIME NOT NULL,
 		updated_at DATETIME NOT NULL,
-		last_seen DATETIME NOT NULL
+		UNIQUE(system_name, address, port)
 	);
 
+	-- Service Definitions table
+	CREATE TABLE IF NOT EXISTS service_definitions (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		service_definition TEXT UNIQUE NOT NULL,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL
+	);
+
+	-- Interfaces table
+	CREATE TABLE IF NOT EXISTS interfaces (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		interface_name TEXT UNIQUE NOT NULL,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL
+	);
+
+	-- Services table (Arrowhead 4.x)
 	CREATE TABLE IF NOT EXISTS services (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		node_id TEXT NOT NULL,
-		definition TEXT NOT NULL,
-		uri TEXT NOT NULL,
-		method TEXT NOT NULL,
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		service_definition_id INTEGER NOT NULL,
+		provider_id INTEGER NOT NULL,
+		service_uri TEXT NOT NULL,
+		end_of_validity DATETIME,
+		secure TEXT NOT NULL DEFAULT 'TOKEN',
 		metadata TEXT,
-		version TEXT NOT NULL DEFAULT '1.0',
-		status TEXT NOT NULL DEFAULT 'active',
-		health_check TEXT,
+		version INTEGER NOT NULL DEFAULT 1,
 		created_at DATETIME NOT NULL,
 		updated_at DATETIME NOT NULL,
-		last_seen DATETIME NOT NULL,
-		FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE,
-		UNIQUE(node_id, uri, method)
+		FOREIGN KEY (service_definition_id) REFERENCES service_definitions (id) ON DELETE CASCADE,
+		FOREIGN KEY (provider_id) REFERENCES systems (id) ON DELETE CASCADE,
+		UNIQUE(service_definition_id, provider_id, service_uri)
 	);
 
-	CREATE TABLE IF NOT EXISTS auth_rules (
-		id TEXT PRIMARY KEY,
-		consumer_id TEXT NOT NULL,
-		provider_id TEXT NOT NULL,
-		service_id TEXT NOT NULL,
-		created_at DATETIME NOT NULL,
-		FOREIGN KEY (consumer_id) REFERENCES nodes(id) ON DELETE CASCADE,
-		FOREIGN KEY (provider_id) REFERENCES nodes(id) ON DELETE CASCADE,
-		FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
-		UNIQUE(consumer_id, provider_id, service_id)
+	-- Service-Interface many-to-many relationship
+	CREATE TABLE IF NOT EXISTS service_interfaces (
+		service_id INTEGER NOT NULL,
+		interface_id INTEGER NOT NULL,
+		PRIMARY KEY (service_id, interface_id),
+		FOREIGN KEY (service_id) REFERENCES services (id) ON DELETE CASCADE,
+		FOREIGN KEY (interface_id) REFERENCES interfaces (id) ON DELETE CASCADE
 	);
 
-	CREATE TABLE IF NOT EXISTS events (
-		id TEXT PRIMARY KEY,
-		type TEXT NOT NULL,
-		topic TEXT NOT NULL,
-		publisher_id TEXT NOT NULL,
-		payload BLOB NOT NULL,
-		metadata TEXT,
-		created_at DATETIME NOT NULL,
-		FOREIGN KEY (publisher_id) REFERENCES nodes(id) ON DELETE CASCADE
-	);
-
-	CREATE TABLE IF NOT EXISTS subscriptions (
-		id TEXT PRIMARY KEY,
-		subscriber_id TEXT NOT NULL,
-		topic TEXT NOT NULL,
-		endpoint TEXT NOT NULL,
-		filters TEXT,
+	-- Authorizations table (Arrowhead 4.x)
+	CREATE TABLE IF NOT EXISTS authorizations (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		consumer_id INTEGER NOT NULL,
+		provider_id INTEGER NOT NULL,
+		service_definition_id INTEGER NOT NULL,
 		created_at DATETIME NOT NULL,
 		updated_at DATETIME NOT NULL,
-		FOREIGN KEY (subscriber_id) REFERENCES nodes(id) ON DELETE CASCADE
+		FOREIGN KEY (consumer_id) REFERENCES systems (id) ON DELETE CASCADE,
+		FOREIGN KEY (provider_id) REFERENCES systems (id) ON DELETE CASCADE,
+		FOREIGN KEY (service_definition_id) REFERENCES service_definitions (id) ON DELETE CASCADE,
+		UNIQUE(consumer_id, provider_id, service_definition_id)
 	);
 
-	CREATE TABLE IF NOT EXISTS gateways (
-		id TEXT PRIMARY KEY,
-		name TEXT UNIQUE NOT NULL,
-		address TEXT NOT NULL,
-		port INTEGER NOT NULL,
-		cloud_id TEXT NOT NULL,
-		certificate TEXT,
-		certificate_hash TEXT,
-		public_key TEXT,
-		metadata TEXT,
-		status TEXT NOT NULL DEFAULT 'online',
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		last_seen DATETIME NOT NULL
+	-- Authorization-Interface many-to-many relationship
+	CREATE TABLE IF NOT EXISTS authorization_interfaces (
+		authorization_id INTEGER NOT NULL,
+		interface_id INTEGER NOT NULL,
+		PRIMARY KEY (authorization_id, interface_id),
+		FOREIGN KEY (authorization_id) REFERENCES authorizations (id) ON DELETE CASCADE,
+		FOREIGN KEY (interface_id) REFERENCES interfaces (id) ON DELETE CASCADE
 	);
 
-	CREATE TABLE IF NOT EXISTS gateway_tunnels (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		local_gateway_id TEXT NOT NULL,
-		remote_gateway_id TEXT NOT NULL,
-		remote_address TEXT NOT NULL,
-		remote_port INTEGER NOT NULL,
-		protocol TEXT NOT NULL,
-		encryption_type TEXT NOT NULL,
-		shared_secret TEXT,
-		status TEXT NOT NULL DEFAULT 'inactive',
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		last_used DATETIME NOT NULL,
-		FOREIGN KEY (local_gateway_id) REFERENCES gateways(id) ON DELETE CASCADE,
-		FOREIGN KEY (remote_gateway_id) REFERENCES gateways(id) ON DELETE CASCADE
-	);
-
-	CREATE TABLE IF NOT EXISTS gateway_sessions (
-		id TEXT PRIMARY KEY,
-		tunnel_id TEXT NOT NULL,
-		requester_id TEXT NOT NULL,
-		provider_id TEXT NOT NULL,
-		service_id TEXT NOT NULL,
-		session_token TEXT UNIQUE NOT NULL,
-		expires_at DATETIME NOT NULL,
-		status TEXT NOT NULL DEFAULT 'pending',
-		metadata TEXT,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		last_activity_at DATETIME NOT NULL,
-		FOREIGN KEY (tunnel_id) REFERENCES gateway_tunnels(id) ON DELETE CASCADE,
-		FOREIGN KEY (requester_id) REFERENCES nodes(id) ON DELETE CASCADE,
-		FOREIGN KEY (provider_id) REFERENCES nodes(id) ON DELETE CASCADE,
-		FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
-	);
-
-	CREATE TABLE IF NOT EXISTS relay_connections (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		gateway_id TEXT NOT NULL,
-		broker_type TEXT NOT NULL,
-		broker_url TEXT NOT NULL,
-		username TEXT,
-		password TEXT,
-		tls_enabled BOOLEAN NOT NULL DEFAULT false,
-		cert_path TEXT,
-		key_path TEXT,
-		ca_cert_path TEXT,
-		max_retries INTEGER NOT NULL DEFAULT 3,
-		retry_delay INTEGER NOT NULL DEFAULT 5000000000,
-		status TEXT NOT NULL DEFAULT 'disconnected',
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		last_ping_at DATETIME,
-		error_message TEXT,
-		FOREIGN KEY (gateway_id) REFERENCES gateways(id) ON DELETE CASCADE
-	);
-
-	CREATE INDEX IF NOT EXISTS idx_services_name ON services(name);
-	CREATE INDEX IF NOT EXISTS idx_services_node_id ON services(node_id);
-	CREATE INDEX IF NOT EXISTS idx_auth_consumer ON auth_rules(consumer_id);
-	CREATE INDEX IF NOT EXISTS idx_auth_provider ON auth_rules(provider_id);
-	CREATE INDEX IF NOT EXISTS idx_events_topic ON events(topic);
-	CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at);
-	CREATE INDEX IF NOT EXISTS idx_subscriptions_topic ON subscriptions(topic);
-	CREATE INDEX IF NOT EXISTS idx_gateways_cloud_id ON gateways(cloud_id);
-	CREATE INDEX IF NOT EXISTS idx_tunnels_local_gateway ON gateway_tunnels(local_gateway_id);
-	CREATE INDEX IF NOT EXISTS idx_tunnels_remote_gateway ON gateway_tunnels(remote_gateway_id);
-	CREATE INDEX IF NOT EXISTS idx_sessions_tunnel ON gateway_sessions(tunnel_id);
-	CREATE INDEX IF NOT EXISTS idx_sessions_token ON gateway_sessions(session_token);
-	CREATE INDEX IF NOT EXISTS idx_relay_gateway ON relay_connections(gateway_id);
+	CREATE INDEX IF NOT EXISTS idx_systems_name ON systems(system_name);
+	CREATE INDEX IF NOT EXISTS idx_systems_address_port ON systems(address, port);
+	CREATE INDEX IF NOT EXISTS idx_services_definition ON services(service_definition_id);
+	CREATE INDEX IF NOT EXISTS idx_services_provider ON services(provider_id);
+	CREATE INDEX IF NOT EXISTS idx_authorizations_consumer ON authorizations(consumer_id);
+	CREATE INDEX IF NOT EXISTS idx_authorizations_provider ON authorizations(provider_id);
 	`
 
 	_, err := s.db.Exec(schema)
 	return err
 }
 
-func (s *SQLite) CreateNode(node *pkg.Node) error {
-	metadata, _ := json.Marshal(node.Metadata)
+// System operations
 
-	query := `
-		INSERT INTO nodes (id, name, address, port, certificate, certificate_hash, metadata, status, created_at, updated_at, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
+func (s *SQLite) CreateSystem(system *pkg.System) error {
+	metadataJSON := "{}"
+	if system.Metadata != nil {
+		if data, err := json.Marshal(system.Metadata); err == nil {
+			metadataJSON = string(data)
+		}
+	}
 
-	_, err := s.db.Exec(query,
-		node.ID, node.Name, node.Address, node.Port,
-		node.Certificate, node.CertificateHash, string(metadata),
-		node.Status, node.CreatedAt, node.UpdatedAt, node.LastSeen,
-	)
+	query := `INSERT INTO systems (system_name, address, port, authentication_info, metadata, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`
+
+	result, err := s.db.Exec(query, system.SystemName, system.Address, system.Port,
+		system.AuthenticationInfo, metadataJSON, system.CreatedAt, system.UpdatedAt)
+	if err != nil {
+		return err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	system.ID = int(id)
+
+	return nil
+}
+
+func (s *SQLite) GetSystemByID(id int) (*pkg.System, error) {
+	query := `SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
+		FROM systems WHERE id = ?`
+
+	row := s.db.QueryRow(query, id)
+	return s.scanSystem(row)
+}
+
+func (s *SQLite) GetSystemByName(systemName string) (*pkg.System, error) {
+	query := `SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
+		FROM systems WHERE system_name = ?`
+
+	row := s.db.QueryRow(query, systemName)
+	return s.scanSystem(row)
+}
+
+func (s *SQLite) GetSystemByParams(systemName, address string, port int) (*pkg.System, error) {
+	query := `SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
+		FROM systems WHERE system_name = ? AND address = ? AND port = ?`
+
+	row := s.db.QueryRow(query, systemName, address, port)
+	return s.scanSystem(row)
+}
+
+func (s *SQLite) UpdateSystem(system *pkg.System) error {
+	metadataJSON := "{}"
+	if system.Metadata != nil {
+		if data, err := json.Marshal(system.Metadata); err == nil {
+			metadataJSON = string(data)
+		}
+	}
+
+	query := `UPDATE systems SET system_name = ?, address = ?, port = ?, authentication_info = ?,
+		metadata = ?, updated_at = ? WHERE id = ?`
+
+	_, err := s.db.Exec(query, system.SystemName, system.Address, system.Port,
+		system.AuthenticationInfo, metadataJSON, system.UpdatedAt, system.ID)
 	return err
 }
 
-func (s *SQLite) GetNode(id string) (*pkg.Node, error) {
-	query := `
-		SELECT id, name, address, port, certificate, certificate_hash, metadata, status, created_at, updated_at, last_seen
-		FROM nodes WHERE id = ?
-	`
-
-	var node pkg.Node
-	var metadataStr string
-
-	err := s.db.QueryRow(query, id).Scan(
-		&node.ID, &node.Name, &node.Address, &node.Port,
-		&node.Certificate, &node.CertificateHash, &metadataStr,
-		&node.Status, &node.CreatedAt, &node.UpdatedAt, &node.LastSeen,
-	)
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	if metadataStr != "" {
-		json.Unmarshal([]byte(metadataStr), &node.Metadata)
-	}
-
-	return &node, nil
-}
-
-func (s *SQLite) GetNodeByName(name string) (*pkg.Node, error) {
-	query := `
-		SELECT id, name, address, port, certificate, certificate_hash, metadata, status, created_at, updated_at, last_seen
-		FROM nodes WHERE name = ?
-	`
-
-	var node pkg.Node
-	var metadataStr string
-
-	err := s.db.QueryRow(query, name).Scan(
-		&node.ID, &node.Name, &node.Address, &node.Port,
-		&node.Certificate, &node.CertificateHash, &metadataStr,
-		&node.Status, &node.CreatedAt, &node.UpdatedAt, &node.LastSeen,
-	)
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	if metadataStr != "" {
-		json.Unmarshal([]byte(metadataStr), &node.Metadata)
-	}
-
-	return &node, nil
-}
-
-func (s *SQLite) UpdateNode(node *pkg.Node) error {
-	metadata, _ := json.Marshal(node.Metadata)
-
-	query := `
-		UPDATE nodes SET name = ?, address = ?, port = ?, certificate = ?, certificate_hash = ?, 
-		metadata = ?, status = ?, updated_at = ?, last_seen = ?
-		WHERE id = ?
-	`
-
-	_, err := s.db.Exec(query,
-		node.Name, node.Address, node.Port, node.Certificate, node.CertificateHash,
-		string(metadata), node.Status, node.UpdatedAt, node.LastSeen, node.ID,
-	)
-	return err
-}
-
-func (s *SQLite) DeleteNode(id string) error {
-	query := "DELETE FROM nodes WHERE id = ?"
+func (s *SQLite) DeleteSystemByID(id int) error {
+	query := `DELETE FROM systems WHERE id = ?`
 	_, err := s.db.Exec(query, id)
 	return err
 }
 
-func (s *SQLite) ListNodes() ([]*pkg.Node, error) {
-	query := `
-		SELECT id, name, address, port, certificate, certificate_hash, metadata, status, created_at, updated_at, last_seen
-		FROM nodes ORDER BY name
-	`
+func (s *SQLite) DeleteSystemByParams(systemName, address string, port int) error {
+	query := `DELETE FROM systems WHERE system_name = ? AND address = ? AND port = ?`
+	_, err := s.db.Exec(query, systemName, address, port)
+	return err
+}
+
+func (s *SQLite) ListSystems(sortField, direction string) ([]pkg.System, error) {
+	// Whitelist allowed sort fields to prevent SQL injection
+	safeSortFields := map[string]string{
+		"id":          "id",
+		"system_name": "system_name",
+		"address":     "address",
+		"port":        "port",
+		"createdAt":   "created_at",
+		"updatedAt":   "updated_at",
+	}
+	
+	// Get safe sort field or default
+	orderBy, ok := safeSortFields[sortField]
+	if !ok {
+		orderBy = "id" // Default sort
+	}
+	
+	// Validate direction
+	if direction != "ASC" && direction != "DESC" {
+		direction = "ASC" // Default direction
+	}
+	
+	query := fmt.Sprintf(`SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
+		FROM systems ORDER BY %s %s`, orderBy, direction)
 
 	rows, err := s.db.Query(query)
 	if err != nil {
@@ -298,61 +231,25 @@ func (s *SQLite) ListNodes() ([]*pkg.Node, error) {
 	}
 	defer rows.Close()
 
-	var nodes []*pkg.Node
+	var systems []pkg.System
 	for rows.Next() {
-		var node pkg.Node
-		var metadataStr string
-
-		err := rows.Scan(
-			&node.ID, &node.Name, &node.Address, &node.Port,
-			&node.Certificate, &node.CertificateHash, &metadataStr,
-			&node.Status, &node.CreatedAt, &node.UpdatedAt, &node.LastSeen,
-		)
+		system, err := s.scanSystemFromRows(rows)
 		if err != nil {
 			return nil, err
 		}
-
-		if metadataStr != "" {
-			json.Unmarshal([]byte(metadataStr), &node.Metadata)
-		}
-
-		nodes = append(nodes, &node)
+		systems = append(systems, *system)
 	}
 
-	return nodes, nil
+	return systems, nil
 }
 
-func (s *SQLite) CreateService(service *pkg.Service) error {
-	metadata, _ := json.Marshal(service.Metadata)
+func (s *SQLite) scanSystem(row *sql.Row) (*pkg.System, error) {
+	var system pkg.System
+	var metadataJSON string
+	var createdAt, updatedAt time.Time
 
-	query := `
-		INSERT INTO services (id, name, node_id, definition, uri, method, metadata, version, status, health_check, created_at, updated_at, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
-
-	_, err := s.db.Exec(query,
-		service.ID, service.Name, service.NodeID, service.Definition, service.URI, service.Method,
-		string(metadata), service.Version, service.Status, service.HealthCheck,
-		service.CreatedAt, service.UpdatedAt, service.LastSeen,
-	)
-	return err
-}
-
-func (s *SQLite) GetService(id string) (*pkg.Service, error) {
-	query := `
-		SELECT id, name, node_id, definition, uri, method, metadata, version, status, health_check, created_at, updated_at, last_seen
-		FROM services WHERE id = ?
-	`
-
-	var service pkg.Service
-	var metadataStr string
-
-	err := s.db.QueryRow(query, id).Scan(
-		&service.ID, &service.Name, &service.NodeID, &service.Definition, &service.URI, &service.Method,
-		&metadataStr, &service.Version, &service.Status, &service.HealthCheck,
-		&service.CreatedAt, &service.UpdatedAt, &service.LastSeen,
-	)
-
+	err := row.Scan(&system.ID, &system.SystemName, &system.Address, &system.Port,
+		&system.AuthenticationInfo, &metadataJSON, &createdAt, &updatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -360,850 +257,799 @@ func (s *SQLite) GetService(id string) (*pkg.Service, error) {
 		return nil, err
 	}
 
-	if metadataStr != "" {
-		json.Unmarshal([]byte(metadataStr), &service.Metadata)
+	system.CreatedAt = &createdAt
+	system.UpdatedAt = &updatedAt
+
+	if metadataJSON != "" && metadataJSON != "{}" {
+		json.Unmarshal([]byte(metadataJSON), &system.Metadata)
 	}
 
+	return &system, nil
+}
+
+func (s *SQLite) scanSystemFromRows(rows *sql.Rows) (*pkg.System, error) {
+	var system pkg.System
+	var metadataJSON string
+	var createdAt, updatedAt time.Time
+
+	err := rows.Scan(&system.ID, &system.SystemName, &system.Address, &system.Port,
+		&system.AuthenticationInfo, &metadataJSON, &createdAt, &updatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	system.CreatedAt = &createdAt
+	system.UpdatedAt = &updatedAt
+
+	if metadataJSON != "" && metadataJSON != "{}" {
+		json.Unmarshal([]byte(metadataJSON), &system.Metadata)
+	}
+
+	return &system, nil
+}
+
+// Service Definition operations
+
+func (s *SQLite) CreateServiceDefinition(serviceDef *pkg.ServiceDefinition) error {
+	query := `INSERT INTO service_definitions (service_definition, created_at, updated_at)
+		VALUES (?, ?, ?)`
+
+	result, err := s.db.Exec(query, serviceDef.ServiceDefinition, serviceDef.CreatedAt, serviceDef.UpdatedAt)
+	if err != nil {
+		return err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	serviceDef.ID = int(id)
+
+	return nil
+}
+
+func (s *SQLite) GetServiceDefinitionByID(id int) (*pkg.ServiceDefinition, error) {
+	query := `SELECT id, service_definition, created_at, updated_at FROM service_definitions WHERE id = ?`
+
+	row := s.db.QueryRow(query, id)
+	var serviceDef pkg.ServiceDefinition
+	var createdAt, updatedAt time.Time
+
+	err := row.Scan(&serviceDef.ID, &serviceDef.ServiceDefinition, &createdAt, &updatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	serviceDef.CreatedAt = &createdAt
+	serviceDef.UpdatedAt = &updatedAt
+
+	return &serviceDef, nil
+}
+
+func (s *SQLite) GetServiceDefinitionByName(name string) (*pkg.ServiceDefinition, error) {
+	query := `SELECT id, service_definition, created_at, updated_at FROM service_definitions WHERE service_definition = ?`
+
+	row := s.db.QueryRow(query, name)
+	var serviceDef pkg.ServiceDefinition
+	var createdAt, updatedAt time.Time
+
+	err := row.Scan(&serviceDef.ID, &serviceDef.ServiceDefinition, &createdAt, &updatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	serviceDef.CreatedAt = &createdAt
+	serviceDef.UpdatedAt = &updatedAt
+
+	return &serviceDef, nil
+}
+
+func (s *SQLite) ListServiceDefinitions() ([]pkg.ServiceDefinition, error) {
+	query := `SELECT id, service_definition, created_at, updated_at FROM service_definitions ORDER BY service_definition`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var serviceDefs []pkg.ServiceDefinition
+	for rows.Next() {
+		var serviceDef pkg.ServiceDefinition
+		var createdAt, updatedAt time.Time
+
+		err := rows.Scan(&serviceDef.ID, &serviceDef.ServiceDefinition, &createdAt, &updatedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		serviceDef.CreatedAt = &createdAt
+		serviceDef.UpdatedAt = &updatedAt
+		serviceDefs = append(serviceDefs, serviceDef)
+	}
+
+	return serviceDefs, nil
+}
+
+// Interface operations
+
+func (s *SQLite) CreateInterface(iface *pkg.Interface) error {
+	query := `INSERT INTO interfaces (interface_name, created_at, updated_at) VALUES (?, ?, ?)`
+
+	result, err := s.db.Exec(query, iface.InterfaceName, iface.CreatedAt, iface.UpdatedAt)
+	if err != nil {
+		return err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	iface.ID = int(id)
+
+	return nil
+}
+
+func (s *SQLite) GetInterfaceByID(id int) (*pkg.Interface, error) {
+	query := `SELECT id, interface_name, created_at, updated_at FROM interfaces WHERE id = ?`
+
+	row := s.db.QueryRow(query, id)
+	var iface pkg.Interface
+	var createdAt, updatedAt time.Time
+
+	err := row.Scan(&iface.ID, &iface.InterfaceName, &createdAt, &updatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	iface.CreatedAt = &createdAt
+	iface.UpdatedAt = &updatedAt
+
+	return &iface, nil
+}
+
+func (s *SQLite) GetInterfaceByName(name string) (*pkg.Interface, error) {
+	query := `SELECT id, interface_name, created_at, updated_at FROM interfaces WHERE interface_name = ?`
+
+	row := s.db.QueryRow(query, name)
+	var iface pkg.Interface
+	var createdAt, updatedAt time.Time
+
+	err := row.Scan(&iface.ID, &iface.InterfaceName, &createdAt, &updatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	iface.CreatedAt = &createdAt
+	iface.UpdatedAt = &updatedAt
+
+	return &iface, nil
+}
+
+func (s *SQLite) ListInterfaces() ([]pkg.Interface, error) {
+	query := `SELECT id, interface_name, created_at, updated_at FROM interfaces ORDER BY interface_name`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var interfaces []pkg.Interface
+	for rows.Next() {
+		var iface pkg.Interface
+		var createdAt, updatedAt time.Time
+
+		err := rows.Scan(&iface.ID, &iface.InterfaceName, &createdAt, &updatedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		iface.CreatedAt = &createdAt
+		iface.UpdatedAt = &updatedAt
+		interfaces = append(interfaces, iface)
+	}
+
+	return interfaces, nil
+}
+
+// Service operations - Simplified implementation for basic functionality
+// Note: This is a basic implementation. For production, you'd want more sophisticated
+// service management with proper interface linking, etc.
+
+func (s *SQLite) CreateService(service *pkg.Service) error {
+	// Start a transaction
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Serialize metadata
+	metadataJSON := "{}"
+	if service.Metadata != nil {
+		if data, err := json.Marshal(service.Metadata); err == nil {
+			metadataJSON = string(data)
+		}
+	}
+
+	// Parse end of validity if provided
+	var endOfValidity *time.Time
+	if service.EndOfValidity != nil {
+		endOfValidity = service.EndOfValidity
+	}
+
+	// Insert service into services table
+	query := `INSERT INTO services (service_definition_id, provider_id, service_uri, end_of_validity, secure, metadata, version, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	result, err := tx.Exec(query, service.ServiceDefinition.ID, service.Provider.ID, service.ServiceUri,
+		endOfValidity, service.Secure, metadataJSON, service.Version, service.CreatedAt, service.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to insert service: %w", err)
+	}
+
+	// Get the inserted service ID
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("failed to get service ID: %w", err)
+	}
+	service.ID = int(id)
+
+	// Insert interface relationships
+	for _, iface := range service.Interfaces {
+		interfaceQuery := `INSERT INTO service_interfaces (service_id, interface_id) VALUES (?, ?)`
+		_, err = tx.Exec(interfaceQuery, service.ID, iface.ID)
+		if err != nil {
+			return fmt.Errorf("failed to insert service interface relationship: %w", err)
+		}
+	}
+
+	// Commit transaction
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (s *SQLite) GetServiceByID(id int) (*pkg.Service, error) {
+	// Query to get service with joined system and service definition data
+	query := `
+		SELECT 
+			s.id, s.service_uri, s.end_of_validity, s.secure, s.metadata, s.version, s.created_at, s.updated_at,
+			sd.id, sd.service_definition, sd.created_at, sd.updated_at,
+			sys.id, sys.system_name, sys.address, sys.port, sys.authentication_info, sys.metadata, sys.created_at, sys.updated_at
+		FROM services s
+		JOIN service_definitions sd ON s.service_definition_id = sd.id
+		JOIN systems sys ON s.provider_id = sys.id
+		WHERE s.id = ?`
+
+	row := s.db.QueryRow(query, id)
+	
+	var service pkg.Service
+	var serviceMetadataJSON, systemMetadataJSON string
+	var serviceCreatedAt, serviceUpdatedAt, sdCreatedAt, sdUpdatedAt, sysCreatedAt, sysUpdatedAt time.Time
+	var endOfValidity *time.Time
+
+	err := row.Scan(
+		&service.ID, &service.ServiceUri, &endOfValidity, &service.Secure, &serviceMetadataJSON, &service.Version, &serviceCreatedAt, &serviceUpdatedAt,
+		&service.ServiceDefinition.ID, &service.ServiceDefinition.ServiceDefinition, &sdCreatedAt, &sdUpdatedAt,
+		&service.Provider.ID, &service.Provider.SystemName, &service.Provider.Address, &service.Provider.Port, &service.Provider.AuthenticationInfo, &systemMetadataJSON, &sysCreatedAt, &sysUpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get service: %w", err)
+	}
+
+	// Set timestamps
+	service.CreatedAt = &serviceCreatedAt
+	service.UpdatedAt = &serviceUpdatedAt
+	service.EndOfValidity = endOfValidity
+	service.ServiceDefinition.CreatedAt = &sdCreatedAt
+	service.ServiceDefinition.UpdatedAt = &sdUpdatedAt
+	service.Provider.CreatedAt = &sysCreatedAt
+	service.Provider.UpdatedAt = &sysUpdatedAt
+
+	// Parse metadata
+	if serviceMetadataJSON != "" && serviceMetadataJSON != "{}" {
+		json.Unmarshal([]byte(serviceMetadataJSON), &service.Metadata)
+	}
+	if systemMetadataJSON != "" && systemMetadataJSON != "{}" {
+		json.Unmarshal([]byte(systemMetadataJSON), &service.Provider.Metadata)
+	}
+
+	// Get interfaces for this service
+	interfaceQuery := `
+		SELECT i.id, i.interface_name, i.created_at, i.updated_at
+		FROM interfaces i
+		JOIN service_interfaces si ON i.id = si.interface_id
+		WHERE si.service_id = ?`
+
+	interfaceRows, err := s.db.Query(interfaceQuery, service.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query service interfaces: %w", err)
+	}
+	defer interfaceRows.Close()
+
+	var interfaces []pkg.Interface
+	for interfaceRows.Next() {
+		var iface pkg.Interface
+		var ifaceCreatedAt, ifaceUpdatedAt time.Time
+
+		err := interfaceRows.Scan(&iface.ID, &iface.InterfaceName, &ifaceCreatedAt, &ifaceUpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan interface row: %w", err)
+		}
+
+		iface.CreatedAt = &ifaceCreatedAt
+		iface.UpdatedAt = &ifaceUpdatedAt
+		interfaces = append(interfaces, iface)
+	}
+
+	service.Interfaces = interfaces
 	return &service, nil
 }
 
-func (s *SQLite) GetServicesByNode(nodeID string) ([]*pkg.Service, error) {
-	query := `
-		SELECT id, name, node_id, definition, uri, method, metadata, version, status, health_check, created_at, updated_at, last_seen
-		FROM services WHERE node_id = ? ORDER BY name
-	`
-
-	rows, err := s.db.Query(query, nodeID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var services []*pkg.Service
-	for rows.Next() {
-		var service pkg.Service
-		var metadataStr string
-
-		err := rows.Scan(
-			&service.ID, &service.Name, &service.NodeID, &service.Definition, &service.URI, &service.Method,
-			&metadataStr, &service.Version, &service.Status, &service.HealthCheck,
-			&service.CreatedAt, &service.UpdatedAt, &service.LastSeen,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if metadataStr != "" {
-			json.Unmarshal([]byte(metadataStr), &service.Metadata)
-		}
-
-		services = append(services, &service)
-	}
-
-	return services, nil
+func (s *SQLite) GetServicesByProvider(providerID int) ([]pkg.Service, error) {
+	return nil, fmt.Errorf("service operations not fully implemented in database layer - registry handles this")
 }
 
-func (s *SQLite) GetServicesByName(name string) ([]*pkg.Service, error) {
-	query := `
-		SELECT id, name, node_id, definition, uri, method, metadata, version, status, health_check, created_at, updated_at, last_seen
-		FROM services WHERE name = ? ORDER BY created_at DESC
-	`
-
-	rows, err := s.db.Query(query, name)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var services []*pkg.Service
-	for rows.Next() {
-		var service pkg.Service
-		var metadataStr string
-
-		err := rows.Scan(
-			&service.ID, &service.Name, &service.NodeID, &service.Definition, &service.URI, &service.Method,
-			&metadataStr, &service.Version, &service.Status, &service.HealthCheck,
-			&service.CreatedAt, &service.UpdatedAt, &service.LastSeen,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if metadataStr != "" {
-			json.Unmarshal([]byte(metadataStr), &service.Metadata)
-		}
-
-		services = append(services, &service)
-	}
-
-	return services, nil
+func (s *SQLite) GetServicesByDefinition(serviceDefinition string) ([]pkg.Service, error) {
+	return nil, fmt.Errorf("service operations not fully implemented in database layer - registry handles this")
 }
 
 func (s *SQLite) UpdateService(service *pkg.Service) error {
-	metadata, _ := json.Marshal(service.Metadata)
-
-	query := `
-		UPDATE services SET name = ?, definition = ?, uri = ?, method = ?, metadata = ?, 
-		version = ?, status = ?, health_check = ?, updated_at = ?, last_seen = ?
-		WHERE id = ?
-	`
-
-	_, err := s.db.Exec(query,
-		service.Name, service.Definition, service.URI, service.Method, string(metadata),
-		service.Version, service.Status, service.HealthCheck, service.UpdatedAt, service.LastSeen,
-		service.ID,
-	)
-	return err
+	return fmt.Errorf("service operations not fully implemented in database layer - registry handles this")
 }
 
-func (s *SQLite) DeleteService(id string) error {
-	query := "DELETE FROM services WHERE id = ?"
+func (s *SQLite) DeleteServiceByID(id int) error {
+	query := `DELETE FROM services WHERE id = ?`
 	_, err := s.db.Exec(query, id)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to delete service: %w", err)
+	}
+	return nil
 }
 
-func (s *SQLite) ListServices() ([]*pkg.Service, error) {
-	query := `
-		SELECT id, name, node_id, definition, uri, method, metadata, version, status, health_check, created_at, updated_at, last_seen
-		FROM services ORDER BY name
-	`
+func (s *SQLite) DeleteServiceByParams(systemName, serviceURI, serviceDefinition, address string, port int) error {
+	return fmt.Errorf("service operations not fully implemented in database layer - registry handles this")
+}
+
+func (s *SQLite) ListServices(sortField, direction string) ([]pkg.Service, error) {
+	// Whitelist allowed sort fields to prevent SQL injection
+	safeSortFields := map[string]string{
+		"id":        "s.id",
+		"createdAt": "s.created_at",
+		"updatedAt": "s.updated_at",
+		"uri":       "s.service_uri",
+		"version":   "s.version",
+	}
+	
+	// Get safe sort field or default
+	orderBy, ok := safeSortFields[sortField]
+	if !ok {
+		orderBy = "s.id" // Default sort
+	}
+	
+	// Validate direction
+	if direction != "ASC" && direction != "DESC" {
+		direction = "ASC" // Default direction
+	}
+	
+	// Query to get services with joined system and service definition data
+	query := fmt.Sprintf(`
+		SELECT 
+			s.id, s.service_uri, s.end_of_validity, s.secure, s.metadata, s.version, s.created_at, s.updated_at,
+			sd.id, sd.service_definition, sd.created_at, sd.updated_at,
+			sys.id, sys.system_name, sys.address, sys.port, sys.authentication_info, sys.metadata, sys.created_at, sys.updated_at
+		FROM services s
+		JOIN service_definitions sd ON s.service_definition_id = sd.id
+		JOIN systems sys ON s.provider_id = sys.id
+		ORDER BY %s %s`, orderBy, direction)
 
 	rows, err := s.db.Query(query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query services: %w", err)
 	}
 	defer rows.Close()
 
-	var services []*pkg.Service
+	var services []pkg.Service
 	for rows.Next() {
 		var service pkg.Service
-		var metadataStr string
+		var serviceMetadataJSON, systemMetadataJSON string
+		var serviceCreatedAt, serviceUpdatedAt, sdCreatedAt, sdUpdatedAt, sysCreatedAt, sysUpdatedAt time.Time
+		var endOfValidity *time.Time
 
 		err := rows.Scan(
-			&service.ID, &service.Name, &service.NodeID, &service.Definition, &service.URI, &service.Method,
-			&metadataStr, &service.Version, &service.Status, &service.HealthCheck,
-			&service.CreatedAt, &service.UpdatedAt, &service.LastSeen,
-		)
+			&service.ID, &service.ServiceUri, &endOfValidity, &service.Secure, &serviceMetadataJSON, &service.Version, &serviceCreatedAt, &serviceUpdatedAt,
+			&service.ServiceDefinition.ID, &service.ServiceDefinition.ServiceDefinition, &sdCreatedAt, &sdUpdatedAt,
+			&service.Provider.ID, &service.Provider.SystemName, &service.Provider.Address, &service.Provider.Port, &service.Provider.AuthenticationInfo, &systemMetadataJSON, &sysCreatedAt, &sysUpdatedAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan service row: %w", err)
 		}
 
-		if metadataStr != "" {
-			json.Unmarshal([]byte(metadataStr), &service.Metadata)
+		// Set timestamps
+		service.CreatedAt = &serviceCreatedAt
+		service.UpdatedAt = &serviceUpdatedAt
+		service.EndOfValidity = endOfValidity
+		service.ServiceDefinition.CreatedAt = &sdCreatedAt
+		service.ServiceDefinition.UpdatedAt = &sdUpdatedAt
+		service.Provider.CreatedAt = &sysCreatedAt
+		service.Provider.UpdatedAt = &sysUpdatedAt
+
+		// Parse metadata
+		if serviceMetadataJSON != "" && serviceMetadataJSON != "{}" {
+			json.Unmarshal([]byte(serviceMetadataJSON), &service.Metadata)
+		}
+		if systemMetadataJSON != "" && systemMetadataJSON != "{}" {
+			json.Unmarshal([]byte(systemMetadataJSON), &service.Provider.Metadata)
 		}
 
-		services = append(services, &service)
+		// Get interfaces for this service
+		interfaceQuery := `
+			SELECT i.id, i.interface_name, i.created_at, i.updated_at
+			FROM interfaces i
+			JOIN service_interfaces si ON i.id = si.interface_id
+			WHERE si.service_id = ?`
+
+		interfaceRows, err := s.db.Query(interfaceQuery, service.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query service interfaces: %w", err)
+		}
+
+		var interfaces []pkg.Interface
+		for interfaceRows.Next() {
+			var iface pkg.Interface
+			var ifaceCreatedAt, ifaceUpdatedAt time.Time
+
+			err := interfaceRows.Scan(&iface.ID, &iface.InterfaceName, &ifaceCreatedAt, &ifaceUpdatedAt)
+			if err != nil {
+				interfaceRows.Close()
+				return nil, fmt.Errorf("failed to scan interface row: %w", err)
+			}
+
+			iface.CreatedAt = &ifaceCreatedAt
+			iface.UpdatedAt = &ifaceUpdatedAt
+			interfaces = append(interfaces, iface)
+		}
+		interfaceRows.Close()
+
+		service.Interfaces = interfaces
+		services = append(services, service)
 	}
 
 	return services, nil
 }
 
-func (s *SQLite) CreateAuthRule(rule *pkg.AuthRule) error {
-	query := `
-		INSERT INTO auth_rules (id, consumer_id, provider_id, service_id, created_at)
-		VALUES (?, ?, ?, ?, ?)
-	`
+// Authorization operations - Simplified implementation
 
-	_, err := s.db.Exec(query, rule.ID, rule.ConsumerID, rule.ProviderID, rule.ServiceID, rule.CreatedAt)
-	return err
+func (s *SQLite) CreateAuthorization(auth *pkg.Authorization) error {
+	// Start a transaction
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Insert authorization into authorizations table
+	query := `INSERT INTO authorizations (consumer_id, provider_id, service_definition_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)`
+
+	result, err := tx.Exec(query, auth.ConsumerSystem.ID, auth.ProviderSystem.ID, auth.ServiceDefinition.ID,
+		auth.CreatedAt, auth.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to insert authorization: %w", err)
+	}
+
+	// Get the inserted authorization ID
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("failed to get authorization ID: %w", err)
+	}
+	auth.ID = int(id)
+
+	// Insert interface relationships
+	for _, iface := range auth.Interfaces {
+		interfaceQuery := `INSERT INTO authorization_interfaces (authorization_id, interface_id) VALUES (?, ?)`
+		_, err = tx.Exec(interfaceQuery, auth.ID, iface.ID)
+		if err != nil {
+			return fmt.Errorf("failed to insert authorization interface relationship: %w", err)
+		}
+	}
+
+	// Commit transaction
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }
 
-func (s *SQLite) GetAuthRule(id string) (*pkg.AuthRule, error) {
+func (s *SQLite) GetAuthorizationByID(id int) (*pkg.Authorization, error) {
+	// Query to get authorization with joined consumer, provider, and service definition data
 	query := `
-		SELECT id, consumer_id, provider_id, service_id, created_at
-		FROM auth_rules WHERE id = ?
-	`
+		SELECT 
+			a.id, a.created_at, a.updated_at,
+			consumer.id, consumer.system_name, consumer.address, consumer.port, consumer.authentication_info, consumer.metadata, consumer.created_at, consumer.updated_at,
+			provider.id, provider.system_name, provider.address, provider.port, provider.authentication_info, provider.metadata, provider.created_at, provider.updated_at,
+			sd.id, sd.service_definition, sd.created_at, sd.updated_at
+		FROM authorizations a
+		JOIN systems consumer ON a.consumer_id = consumer.id
+		JOIN systems provider ON a.provider_id = provider.id
+		JOIN service_definitions sd ON a.service_definition_id = sd.id
+		WHERE a.id = ?`
 
-	var rule pkg.AuthRule
-	err := s.db.QueryRow(query, id).Scan(
-		&rule.ID, &rule.ConsumerID, &rule.ProviderID, &rule.ServiceID, &rule.CreatedAt,
-	)
+	row := s.db.QueryRow(query, id)
+	
+	var auth pkg.Authorization
+	var consumerMetadataJSON, providerMetadataJSON string
+	var authCreatedAt, authUpdatedAt, consumerCreatedAt, consumerUpdatedAt, providerCreatedAt, providerUpdatedAt, sdCreatedAt, sdUpdatedAt time.Time
 
+	err := row.Scan(
+		&auth.ID, &authCreatedAt, &authUpdatedAt,
+		&auth.ConsumerSystem.ID, &auth.ConsumerSystem.SystemName, &auth.ConsumerSystem.Address, &auth.ConsumerSystem.Port, &auth.ConsumerSystem.AuthenticationInfo, &consumerMetadataJSON, &consumerCreatedAt, &consumerUpdatedAt,
+		&auth.ProviderSystem.ID, &auth.ProviderSystem.SystemName, &auth.ProviderSystem.Address, &auth.ProviderSystem.Port, &auth.ProviderSystem.AuthenticationInfo, &providerMetadataJSON, &providerCreatedAt, &providerUpdatedAt,
+		&auth.ServiceDefinition.ID, &auth.ServiceDefinition.ServiceDefinition, &sdCreatedAt, &sdUpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to get authorization: %w", err)
 	}
 
-	return &rule, nil
-}
+	// Set timestamps
+	auth.CreatedAt = &authCreatedAt
+	auth.UpdatedAt = &authUpdatedAt
+	auth.ConsumerSystem.CreatedAt = &consumerCreatedAt
+	auth.ConsumerSystem.UpdatedAt = &consumerUpdatedAt
+	auth.ProviderSystem.CreatedAt = &providerCreatedAt
+	auth.ProviderSystem.UpdatedAt = &providerUpdatedAt
+	auth.ServiceDefinition.CreatedAt = &sdCreatedAt
+	auth.ServiceDefinition.UpdatedAt = &sdUpdatedAt
 
-func (s *SQLite) GetAuthRules(consumerID, providerID, serviceID string) ([]*pkg.AuthRule, error) {
-	query := `
-		SELECT id, consumer_id, provider_id, service_id, created_at
-		FROM auth_rules WHERE consumer_id = ? AND provider_id = ? AND service_id = ?
-	`
+	// Parse metadata
+	if consumerMetadataJSON != "" && consumerMetadataJSON != "{}" {
+		json.Unmarshal([]byte(consumerMetadataJSON), &auth.ConsumerSystem.Metadata)
+	}
+	if providerMetadataJSON != "" && providerMetadataJSON != "{}" {
+		json.Unmarshal([]byte(providerMetadataJSON), &auth.ProviderSystem.Metadata)
+	}
 
-	rows, err := s.db.Query(query, consumerID, providerID, serviceID)
+	// Get interfaces for this authorization
+	interfaceQuery := `
+		SELECT i.id, i.interface_name, i.created_at, i.updated_at
+		FROM interfaces i
+		JOIN authorization_interfaces ai ON i.id = ai.interface_id
+		WHERE ai.authorization_id = ?`
+
+	interfaceRows, err := s.db.Query(interfaceQuery, auth.ID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query authorization interfaces: %w", err)
 	}
-	defer rows.Close()
+	defer interfaceRows.Close()
 
-	var rules []*pkg.AuthRule
-	for rows.Next() {
-		var rule pkg.AuthRule
-		err := rows.Scan(&rule.ID, &rule.ConsumerID, &rule.ProviderID, &rule.ServiceID, &rule.CreatedAt)
+	var interfaces []pkg.Interface
+	for interfaceRows.Next() {
+		var iface pkg.Interface
+		var ifaceCreatedAt, ifaceUpdatedAt time.Time
+
+		err := interfaceRows.Scan(&iface.ID, &iface.InterfaceName, &ifaceCreatedAt, &ifaceUpdatedAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan interface row: %w", err)
 		}
-		rules = append(rules, &rule)
+
+		iface.CreatedAt = &ifaceCreatedAt
+		iface.UpdatedAt = &ifaceUpdatedAt
+		interfaces = append(interfaces, iface)
 	}
 
-	return rules, nil
+	auth.Interfaces = interfaces
+	return &auth, nil
 }
 
-func (s *SQLite) DeleteAuthRule(id string) error {
-	query := "DELETE FROM auth_rules WHERE id = ?"
+func (s *SQLite) GetAuthorizationsByConsumer(consumerID int) ([]pkg.Authorization, error) {
+	return nil, fmt.Errorf("authorization operations not fully implemented in database layer - registry handles this")
+}
+
+func (s *SQLite) GetAuthorizationsByProvider(providerID int) ([]pkg.Authorization, error) {
+	return nil, fmt.Errorf("authorization operations not fully implemented in database layer - registry handles this")
+}
+
+func (s *SQLite) DeleteAuthorizationByID(id int) error {
+	query := `DELETE FROM authorizations WHERE id = ?`
 	_, err := s.db.Exec(query, id)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to delete authorization: %w", err)
+	}
+	return nil
 }
 
-func (s *SQLite) ListAuthRules() ([]*pkg.AuthRule, error) {
-	query := `
-		SELECT id, consumer_id, provider_id, service_id, created_at
-		FROM auth_rules ORDER BY created_at DESC
-	`
+func (s *SQLite) ListAuthorizations(sortField, direction string) ([]pkg.Authorization, error) {
+	// Whitelist allowed sort fields to prevent SQL injection
+	safeSortFields := map[string]string{
+		"id":        "a.id",
+		"createdAt": "a.created_at",
+		"updatedAt": "a.updated_at",
+	}
+	
+	// Get safe sort field or default
+	orderBy, ok := safeSortFields[sortField]
+	if !ok {
+		orderBy = "a.id" // Default sort
+	}
+	
+	// Validate direction
+	if direction != "ASC" && direction != "DESC" {
+		direction = "ASC" // Default direction
+	}
+	
+	// Query to get authorizations with joined consumer, provider, and service definition data
+	query := fmt.Sprintf(`
+		SELECT 
+			a.id, a.created_at, a.updated_at,
+			consumer.id, consumer.system_name, consumer.address, consumer.port, consumer.authentication_info, consumer.metadata, consumer.created_at, consumer.updated_at,
+			provider.id, provider.system_name, provider.address, provider.port, provider.authentication_info, provider.metadata, provider.created_at, provider.updated_at,
+			sd.id, sd.service_definition, sd.created_at, sd.updated_at
+		FROM authorizations a
+		JOIN systems consumer ON a.consumer_id = consumer.id
+		JOIN systems provider ON a.provider_id = provider.id
+		JOIN service_definitions sd ON a.service_definition_id = sd.id
+		ORDER BY %s %s`, orderBy, direction)
 
 	rows, err := s.db.Query(query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query authorizations: %w", err)
 	}
 	defer rows.Close()
 
-	var rules []*pkg.AuthRule
+	var authorizations []pkg.Authorization
 	for rows.Next() {
-		var rule pkg.AuthRule
-		err := rows.Scan(&rule.ID, &rule.ConsumerID, &rule.ProviderID, &rule.ServiceID, &rule.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		rules = append(rules, &rule)
-	}
-
-	return rules, nil
-}
-
-func (s *SQLite) CreateEvent(event *pkg.Event) error {
-	metadata, _ := json.Marshal(event.Metadata)
-
-	query := `
-		INSERT INTO events (id, type, topic, publisher_id, payload, metadata, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`
-
-	_, err := s.db.Exec(query,
-		event.ID, event.Type, event.Topic, event.PublisherID, event.Payload, string(metadata), event.CreatedAt,
-	)
-	return err
-}
-
-func (s *SQLite) GetEvent(id string) (*pkg.Event, error) {
-	query := `
-		SELECT id, type, topic, publisher_id, payload, metadata, created_at
-		FROM events WHERE id = ?
-	`
-
-	var event pkg.Event
-	var metadataStr string
-
-	err := s.db.QueryRow(query, id).Scan(
-		&event.ID, &event.Type, &event.Topic, &event.PublisherID, &event.Payload, &metadataStr, &event.CreatedAt,
-	)
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	if metadataStr != "" {
-		json.Unmarshal([]byte(metadataStr), &event.Metadata)
-	}
-
-	return &event, nil
-}
-
-func (s *SQLite) ListEvents(limit int) ([]*pkg.Event, error) {
-	query := `
-		SELECT id, type, topic, publisher_id, payload, metadata, created_at
-		FROM events ORDER BY created_at DESC LIMIT ?
-	`
-
-	rows, err := s.db.Query(query, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var events []*pkg.Event
-	for rows.Next() {
-		var event pkg.Event
-		var metadataStr string
+		var auth pkg.Authorization
+		var consumerMetadataJSON, providerMetadataJSON string
+		var authCreatedAt, authUpdatedAt, consumerCreatedAt, consumerUpdatedAt, providerCreatedAt, providerUpdatedAt, sdCreatedAt, sdUpdatedAt time.Time
 
 		err := rows.Scan(
-			&event.ID, &event.Type, &event.Topic, &event.PublisherID, &event.Payload, &metadataStr, &event.CreatedAt,
-		)
+			&auth.ID, &authCreatedAt, &authUpdatedAt,
+			&auth.ConsumerSystem.ID, &auth.ConsumerSystem.SystemName, &auth.ConsumerSystem.Address, &auth.ConsumerSystem.Port, &auth.ConsumerSystem.AuthenticationInfo, &consumerMetadataJSON, &consumerCreatedAt, &consumerUpdatedAt,
+			&auth.ProviderSystem.ID, &auth.ProviderSystem.SystemName, &auth.ProviderSystem.Address, &auth.ProviderSystem.Port, &auth.ProviderSystem.AuthenticationInfo, &providerMetadataJSON, &providerCreatedAt, &providerUpdatedAt,
+			&auth.ServiceDefinition.ID, &auth.ServiceDefinition.ServiceDefinition, &sdCreatedAt, &sdUpdatedAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan authorization row: %w", err)
 		}
 
-		if metadataStr != "" {
-			json.Unmarshal([]byte(metadataStr), &event.Metadata)
+		// Set timestamps
+		auth.CreatedAt = &authCreatedAt
+		auth.UpdatedAt = &authUpdatedAt
+		auth.ConsumerSystem.CreatedAt = &consumerCreatedAt
+		auth.ConsumerSystem.UpdatedAt = &consumerUpdatedAt
+		auth.ProviderSystem.CreatedAt = &providerCreatedAt
+		auth.ProviderSystem.UpdatedAt = &providerUpdatedAt
+		auth.ServiceDefinition.CreatedAt = &sdCreatedAt
+		auth.ServiceDefinition.UpdatedAt = &sdUpdatedAt
+
+		// Parse metadata
+		if consumerMetadataJSON != "" && consumerMetadataJSON != "{}" {
+			json.Unmarshal([]byte(consumerMetadataJSON), &auth.ConsumerSystem.Metadata)
+		}
+		if providerMetadataJSON != "" && providerMetadataJSON != "{}" {
+			json.Unmarshal([]byte(providerMetadataJSON), &auth.ProviderSystem.Metadata)
 		}
 
-		events = append(events, &event)
-	}
+		// Get interfaces for this authorization
+		interfaceQuery := `
+			SELECT i.id, i.interface_name, i.created_at, i.updated_at
+			FROM interfaces i
+			JOIN authorization_interfaces ai ON i.id = ai.interface_id
+			WHERE ai.authorization_id = ?`
 
-	return events, nil
-}
-
-func (s *SQLite) DeleteOldEvents(before time.Time) error {
-	query := "DELETE FROM events WHERE created_at < ?"
-	_, err := s.db.Exec(query, before)
-	return err
-}
-
-func (s *SQLite) CreateSubscription(sub *pkg.Subscription) error {
-	filters, _ := json.Marshal(sub.Filters)
-
-	query := `
-		INSERT INTO subscriptions (id, subscriber_id, topic, endpoint, filters, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`
-
-	_, err := s.db.Exec(query,
-		sub.ID, sub.SubscriberID, sub.Topic, sub.Endpoint, string(filters), sub.CreatedAt, sub.UpdatedAt,
-	)
-	return err
-}
-
-func (s *SQLite) GetSubscription(id string) (*pkg.Subscription, error) {
-	query := `
-		SELECT id, subscriber_id, topic, endpoint, filters, created_at, updated_at
-		FROM subscriptions WHERE id = ?
-	`
-
-	var sub pkg.Subscription
-	var filtersStr string
-
-	err := s.db.QueryRow(query, id).Scan(
-		&sub.ID, &sub.SubscriberID, &sub.Topic, &sub.Endpoint, &filtersStr, &sub.CreatedAt, &sub.UpdatedAt,
-	)
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	if filtersStr != "" {
-		json.Unmarshal([]byte(filtersStr), &sub.Filters)
-	}
-
-	return &sub, nil
-}
-
-func (s *SQLite) GetSubscriptionsByTopic(topic string) ([]*pkg.Subscription, error) {
-	query := `
-		SELECT id, subscriber_id, topic, endpoint, filters, created_at, updated_at
-		FROM subscriptions WHERE topic = ? ORDER BY created_at
-	`
-
-	rows, err := s.db.Query(query, topic)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var subscriptions []*pkg.Subscription
-	for rows.Next() {
-		var sub pkg.Subscription
-		var filtersStr string
-
-		err := rows.Scan(
-			&sub.ID, &sub.SubscriberID, &sub.Topic, &sub.Endpoint, &filtersStr, &sub.CreatedAt, &sub.UpdatedAt,
-		)
+		interfaceRows, err := s.db.Query(interfaceQuery, auth.ID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to query authorization interfaces: %w", err)
 		}
 
-		if filtersStr != "" {
-			json.Unmarshal([]byte(filtersStr), &sub.Filters)
-		}
+		var interfaces []pkg.Interface
+		for interfaceRows.Next() {
+			var iface pkg.Interface
+			var ifaceCreatedAt, ifaceUpdatedAt time.Time
 
-		subscriptions = append(subscriptions, &sub)
+			err := interfaceRows.Scan(&iface.ID, &iface.InterfaceName, &ifaceCreatedAt, &ifaceUpdatedAt)
+			if err != nil {
+				interfaceRows.Close()
+				return nil, fmt.Errorf("failed to scan interface row: %w", err)
+			}
+
+			iface.CreatedAt = &ifaceCreatedAt
+			iface.UpdatedAt = &ifaceUpdatedAt
+			interfaces = append(interfaces, iface)
+		}
+		interfaceRows.Close()
+
+		auth.Interfaces = interfaces
+		authorizations = append(authorizations, auth)
 	}
 
-	return subscriptions, nil
+	return authorizations, nil
 }
 
-func (s *SQLite) UpdateSubscription(sub *pkg.Subscription) error {
-	filters, _ := json.Marshal(sub.Filters)
-
+func (s *SQLite) CheckAuthorization(consumerID, providerID, serviceDefinitionID int, interfaceIDs []int) (bool, error) {
+	// Check if there's an authorization rule that matches the consumer, provider, and service definition
 	query := `
-		UPDATE subscriptions SET topic = ?, endpoint = ?, filters = ?, updated_at = ?
-		WHERE id = ?
-	`
+		SELECT COUNT(*) 
+		FROM authorizations 
+		WHERE consumer_id = ? AND provider_id = ? AND service_definition_id = ?`
 
-	_, err := s.db.Exec(query, sub.Topic, sub.Endpoint, string(filters), sub.UpdatedAt, sub.ID)
-	return err
-}
-
-func (s *SQLite) DeleteSubscription(id string) error {
-	query := "DELETE FROM subscriptions WHERE id = ?"
-	_, err := s.db.Exec(query, id)
-	return err
-}
-
-func (s *SQLite) ListSubscriptions() ([]*pkg.Subscription, error) {
-	query := `
-		SELECT id, subscriber_id, topic, endpoint, filters, created_at, updated_at
-		FROM subscriptions ORDER BY topic, created_at
-	`
-
-	rows, err := s.db.Query(query)
+	var count int
+	err := s.db.QueryRow(query, consumerID, providerID, serviceDefinitionID).Scan(&count)
 	if err != nil {
-		return nil, err
+		return false, fmt.Errorf("failed to check authorization: %w", err)
 	}
-	defer rows.Close()
 
-	var subscriptions []*pkg.Subscription
-	for rows.Next() {
-		var sub pkg.Subscription
-		var filtersStr string
+	if count == 0 {
+		return false, nil // No authorization rule found
+	}
 
-		err := rows.Scan(
-			&sub.ID, &sub.SubscriberID, &sub.Topic, &sub.Endpoint, &filtersStr, &sub.CreatedAt, &sub.UpdatedAt,
-		)
+	// If there are specific interface requirements, check if the authorization covers them
+	if len(interfaceIDs) > 0 {
+		// Get the authorization ID first
+		var authID int
+		authQuery := `SELECT id FROM authorizations WHERE consumer_id = ? AND provider_id = ? AND service_definition_id = ?`
+		err := s.db.QueryRow(authQuery, consumerID, providerID, serviceDefinitionID).Scan(&authID)
 		if err != nil {
-			return nil, err
+			return false, fmt.Errorf("failed to get authorization ID: %w", err)
 		}
 
-		if filtersStr != "" {
-			json.Unmarshal([]byte(filtersStr), &sub.Filters)
+		// Check if all required interfaces are authorized
+		for _, interfaceID := range interfaceIDs {
+			interfaceQuery := `
+				SELECT COUNT(*) 
+				FROM authorization_interfaces 
+				WHERE authorization_id = ? AND interface_id = ?`
+			
+			var interfaceCount int
+			err := s.db.QueryRow(interfaceQuery, authID, interfaceID).Scan(&interfaceCount)
+			if err != nil {
+				return false, fmt.Errorf("failed to check interface authorization: %w", err)
+			}
+			
+			if interfaceCount == 0 {
+				return false, nil // Interface not authorized
+			}
 		}
-
-		subscriptions = append(subscriptions, &sub)
 	}
 
-	return subscriptions, nil
+	return true, nil
 }
 
-func (s *SQLite) CreateGateway(gateway *pkg.Gateway) error {
-	metadata, _ := json.Marshal(gateway.Metadata)
 
-	query := `
-		INSERT INTO gateways (id, name, address, port, cloud_id, certificate, certificate_hash, public_key, metadata, status, created_at, updated_at, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
-
-	_, err := s.db.Exec(query,
-		gateway.ID, gateway.Name, gateway.Address, gateway.Port, gateway.CloudID,
-		gateway.Certificate, gateway.CertificateHash, gateway.PublicKey, string(metadata),
-		gateway.Status, gateway.CreatedAt, gateway.UpdatedAt, gateway.LastSeen,
-	)
-	return err
-}
-
-func (s *SQLite) GetGateway(id string) (*pkg.Gateway, error) {
-	query := `
-		SELECT id, name, address, port, cloud_id, certificate, certificate_hash, public_key, metadata, status, created_at, updated_at, last_seen
-		FROM gateways WHERE id = ?
-	`
-
-	var gateway pkg.Gateway
-	var metadataStr string
-
-	err := s.db.QueryRow(query, id).Scan(
-		&gateway.ID, &gateway.Name, &gateway.Address, &gateway.Port, &gateway.CloudID,
-		&gateway.Certificate, &gateway.CertificateHash, &gateway.PublicKey, &metadataStr,
-		&gateway.Status, &gateway.CreatedAt, &gateway.UpdatedAt, &gateway.LastSeen,
-	)
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	if metadataStr != "" {
-		json.Unmarshal([]byte(metadataStr), &gateway.Metadata)
-	}
-
-	return &gateway, nil
-}
-
-func (s *SQLite) UpdateGateway(gateway *pkg.Gateway) error {
-	metadata, _ := json.Marshal(gateway.Metadata)
-
-	query := `
-		UPDATE gateways SET name = ?, address = ?, port = ?, cloud_id = ?, certificate = ?, 
-		certificate_hash = ?, public_key = ?, metadata = ?, status = ?, updated_at = ?, last_seen = ?
-		WHERE id = ?
-	`
-
-	_, err := s.db.Exec(query,
-		gateway.Name, gateway.Address, gateway.Port, gateway.CloudID, gateway.Certificate,
-		gateway.CertificateHash, gateway.PublicKey, string(metadata), gateway.Status,
-		gateway.UpdatedAt, gateway.LastSeen, gateway.ID,
-	)
-	return err
-}
-
-func (s *SQLite) DeleteGateway(id string) error {
-	query := "DELETE FROM gateways WHERE id = ?"
-	_, err := s.db.Exec(query, id)
-	return err
-}
-
-func (s *SQLite) ListGateways() ([]*pkg.Gateway, error) {
-	query := `
-		SELECT id, name, address, port, cloud_id, certificate, certificate_hash, public_key, metadata, status, created_at, updated_at, last_seen
-		FROM gateways ORDER BY name
-	`
-
-	rows, err := s.db.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var gateways []*pkg.Gateway
-	for rows.Next() {
-		var gateway pkg.Gateway
-		var metadataStr string
-
-		err := rows.Scan(
-			&gateway.ID, &gateway.Name, &gateway.Address, &gateway.Port, &gateway.CloudID,
-			&gateway.Certificate, &gateway.CertificateHash, &gateway.PublicKey, &metadataStr,
-			&gateway.Status, &gateway.CreatedAt, &gateway.UpdatedAt, &gateway.LastSeen,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if metadataStr != "" {
-			json.Unmarshal([]byte(metadataStr), &gateway.Metadata)
-		}
-
-		gateways = append(gateways, &gateway)
-	}
-
-	return gateways, nil
-}
-
-func (s *SQLite) CreateTunnel(tunnel *pkg.GatewayTunnel) error {
-	query := `
-		INSERT INTO gateway_tunnels (id, name, local_gateway_id, remote_gateway_id, remote_address, remote_port, protocol, encryption_type, shared_secret, status, created_at, updated_at, last_used)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
-
-	_, err := s.db.Exec(query,
-		tunnel.ID, tunnel.Name, tunnel.LocalGatewayID, tunnel.RemoteGatewayID,
-		tunnel.RemoteAddress, tunnel.RemotePort, tunnel.Protocol, tunnel.EncryptionType,
-		tunnel.SharedSecret, tunnel.Status, tunnel.CreatedAt, tunnel.UpdatedAt, tunnel.LastUsed,
-	)
-	return err
-}
-
-func (s *SQLite) GetTunnel(id string) (*pkg.GatewayTunnel, error) {
-	query := `
-		SELECT id, name, local_gateway_id, remote_gateway_id, remote_address, remote_port, protocol, encryption_type, shared_secret, status, created_at, updated_at, last_used
-		FROM gateway_tunnels WHERE id = ?
-	`
-
-	var tunnel pkg.GatewayTunnel
-
-	err := s.db.QueryRow(query, id).Scan(
-		&tunnel.ID, &tunnel.Name, &tunnel.LocalGatewayID, &tunnel.RemoteGatewayID,
-		&tunnel.RemoteAddress, &tunnel.RemotePort, &tunnel.Protocol, &tunnel.EncryptionType,
-		&tunnel.SharedSecret, &tunnel.Status, &tunnel.CreatedAt, &tunnel.UpdatedAt, &tunnel.LastUsed,
-	)
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	return &tunnel, nil
-}
-
-func (s *SQLite) UpdateTunnel(tunnel *pkg.GatewayTunnel) error {
-	query := `
-		UPDATE gateway_tunnels SET name = ?, remote_address = ?, remote_port = ?, protocol = ?, 
-		encryption_type = ?, shared_secret = ?, status = ?, updated_at = ?, last_used = ?
-		WHERE id = ?
-	`
-
-	_, err := s.db.Exec(query,
-		tunnel.Name, tunnel.RemoteAddress, tunnel.RemotePort, tunnel.Protocol,
-		tunnel.EncryptionType, tunnel.SharedSecret, tunnel.Status, tunnel.UpdatedAt, tunnel.LastUsed,
-		tunnel.ID,
-	)
-	return err
-}
-
-func (s *SQLite) DeleteTunnel(id string) error {
-	query := "DELETE FROM gateway_tunnels WHERE id = ?"
-	_, err := s.db.Exec(query, id)
-	return err
-}
-
-func (s *SQLite) ListTunnelsByGateway(gatewayID string) ([]*pkg.GatewayTunnel, error) {
-	query := `
-		SELECT id, name, local_gateway_id, remote_gateway_id, remote_address, remote_port, protocol, encryption_type, shared_secret, status, created_at, updated_at, last_used
-		FROM gateway_tunnels WHERE local_gateway_id = ? ORDER BY name
-	`
-
-	rows, err := s.db.Query(query, gatewayID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var tunnels []*pkg.GatewayTunnel
-	for rows.Next() {
-		var tunnel pkg.GatewayTunnel
-
-		err := rows.Scan(
-			&tunnel.ID, &tunnel.Name, &tunnel.LocalGatewayID, &tunnel.RemoteGatewayID,
-			&tunnel.RemoteAddress, &tunnel.RemotePort, &tunnel.Protocol, &tunnel.EncryptionType,
-			&tunnel.SharedSecret, &tunnel.Status, &tunnel.CreatedAt, &tunnel.UpdatedAt, &tunnel.LastUsed,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		tunnels = append(tunnels, &tunnel)
-	}
-
-	return tunnels, nil
-}
-
-func (s *SQLite) CreateSession(session *pkg.GatewaySession) error {
-	metadata, _ := json.Marshal(session.Metadata)
-
-	query := `
-		INSERT INTO gateway_sessions (id, tunnel_id, requester_id, provider_id, service_id, session_token, expires_at, status, metadata, created_at, updated_at, last_activity_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
-
-	_, err := s.db.Exec(query,
-		session.ID, session.TunnelID, session.RequesterID, session.ProviderID, session.ServiceID,
-		session.SessionToken, session.ExpiresAt, session.Status, string(metadata),
-		session.CreatedAt, session.UpdatedAt, session.LastActivityAt,
-	)
-	return err
-}
-
-func (s *SQLite) GetSession(id string) (*pkg.GatewaySession, error) {
-	query := `
-		SELECT id, tunnel_id, requester_id, provider_id, service_id, session_token, expires_at, status, metadata, created_at, updated_at, last_activity_at
-		FROM gateway_sessions WHERE id = ?
-	`
-
-	var session pkg.GatewaySession
-	var metadataStr string
-
-	err := s.db.QueryRow(query, id).Scan(
-		&session.ID, &session.TunnelID, &session.RequesterID, &session.ProviderID, &session.ServiceID,
-		&session.SessionToken, &session.ExpiresAt, &session.Status, &metadataStr,
-		&session.CreatedAt, &session.UpdatedAt, &session.LastActivityAt,
-	)
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	if metadataStr != "" {
-		json.Unmarshal([]byte(metadataStr), &session.Metadata)
-	}
-
-	return &session, nil
-}
-
-func (s *SQLite) UpdateSession(session *pkg.GatewaySession) error {
-	metadata, _ := json.Marshal(session.Metadata)
-
-	query := `
-		UPDATE gateway_sessions SET expires_at = ?, status = ?, metadata = ?, updated_at = ?, last_activity_at = ?
-		WHERE id = ?
-	`
-
-	_, err := s.db.Exec(query,
-		session.ExpiresAt, session.Status, string(metadata), session.UpdatedAt, session.LastActivityAt,
-		session.ID,
-	)
-	return err
-}
-
-func (s *SQLite) DeleteSession(id string) error {
-	query := "DELETE FROM gateway_sessions WHERE id = ?"
-	_, err := s.db.Exec(query, id)
-	return err
-}
-
-func (s *SQLite) ListSessionsByTunnel(tunnelID string) ([]*pkg.GatewaySession, error) {
-	query := `
-		SELECT id, tunnel_id, requester_id, provider_id, service_id, session_token, expires_at, status, metadata, created_at, updated_at, last_activity_at
-		FROM gateway_sessions WHERE tunnel_id = ? ORDER BY created_at DESC
-	`
-
-	rows, err := s.db.Query(query, tunnelID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var sessions []*pkg.GatewaySession
-	for rows.Next() {
-		var session pkg.GatewaySession
-		var metadataStr string
-
-		err := rows.Scan(
-			&session.ID, &session.TunnelID, &session.RequesterID, &session.ProviderID, &session.ServiceID,
-			&session.SessionToken, &session.ExpiresAt, &session.Status, &metadataStr,
-			&session.CreatedAt, &session.UpdatedAt, &session.LastActivityAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if metadataStr != "" {
-			json.Unmarshal([]byte(metadataStr), &session.Metadata)
-		}
-
-		sessions = append(sessions, &session)
-	}
-
-	return sessions, nil
-}
-
-func (s *SQLite) CreateRelayConnection(connection *pkg.RelayConnection) error {
-	query := `
-		INSERT INTO relay_connections (id, name, gateway_id, broker_type, broker_url, username, password, tls_enabled, cert_path, key_path, ca_cert_path, max_retries, retry_delay, status, created_at, updated_at, last_ping_at, error_message)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
-
-	_, err := s.db.Exec(query,
-		connection.ID, connection.Name, connection.GatewayID, connection.BrokerType, connection.BrokerURL,
-		connection.Username, connection.Password, connection.TLSEnabled, connection.CertPath, connection.KeyPath,
-		connection.CACertPath, connection.MaxRetries, connection.RetryDelay, connection.Status,
-		connection.CreatedAt, connection.UpdatedAt, connection.LastPingAt, connection.ErrorMessage,
-	)
-	return err
-}
-
-func (s *SQLite) GetRelayConnection(id string) (*pkg.RelayConnection, error) {
-	query := `
-		SELECT id, name, gateway_id, broker_type, broker_url, username, password, tls_enabled, cert_path, key_path, ca_cert_path, max_retries, retry_delay, status, created_at, updated_at, last_ping_at, error_message
-		FROM relay_connections WHERE id = ?
-	`
-
-	var connection pkg.RelayConnection
-
-	err := s.db.QueryRow(query, id).Scan(
-		&connection.ID, &connection.Name, &connection.GatewayID, &connection.BrokerType, &connection.BrokerURL,
-		&connection.Username, &connection.Password, &connection.TLSEnabled, &connection.CertPath, &connection.KeyPath,
-		&connection.CACertPath, &connection.MaxRetries, &connection.RetryDelay, &connection.Status,
-		&connection.CreatedAt, &connection.UpdatedAt, &connection.LastPingAt, &connection.ErrorMessage,
-	)
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	return &connection, nil
-}
-
-func (s *SQLite) UpdateRelayConnection(connection *pkg.RelayConnection) error {
-	query := `
-		UPDATE relay_connections SET name = ?, broker_url = ?, username = ?, password = ?, tls_enabled = ?, 
-		cert_path = ?, key_path = ?, ca_cert_path = ?, max_retries = ?, retry_delay = ?, status = ?, 
-		updated_at = ?, last_ping_at = ?, error_message = ?
-		WHERE id = ?
-	`
-
-	_, err := s.db.Exec(query,
-		connection.Name, connection.BrokerURL, connection.Username, connection.Password, connection.TLSEnabled,
-		connection.CertPath, connection.KeyPath, connection.CACertPath, connection.MaxRetries, connection.RetryDelay,
-		connection.Status, connection.UpdatedAt, connection.LastPingAt, connection.ErrorMessage,
-		connection.ID,
-	)
-	return err
-}
-
-func (s *SQLite) DeleteRelayConnection(id string) error {
-	query := "DELETE FROM relay_connections WHERE id = ?"
-	_, err := s.db.Exec(query, id)
-	return err
-}
-
-func (s *SQLite) ListRelayConnectionsByGateway(gatewayID string) ([]*pkg.RelayConnection, error) {
-	query := `
-		SELECT id, name, gateway_id, broker_type, broker_url, username, password, tls_enabled, cert_path, key_path, ca_cert_path, max_retries, retry_delay, status, created_at, updated_at, last_ping_at, error_message
-		FROM relay_connections WHERE gateway_id = ? ORDER BY name
-	`
-
-	rows, err := s.db.Query(query, gatewayID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var connections []*pkg.RelayConnection
-	for rows.Next() {
-		var connection pkg.RelayConnection
-
-		err := rows.Scan(
-			&connection.ID, &connection.Name, &connection.GatewayID, &connection.BrokerType, &connection.BrokerURL,
-			&connection.Username, &connection.Password, &connection.TLSEnabled, &connection.CertPath, &connection.KeyPath,
-			&connection.CACertPath, &connection.MaxRetries, &connection.RetryDelay, &connection.Status,
-			&connection.CreatedAt, &connection.UpdatedAt, &connection.LastPingAt, &connection.ErrorMessage,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		connections = append(connections, &connection)
-	}
-
-	return connections, nil
-}
+// Metrics
 
 func (s *SQLite) GetMetrics() (*pkg.Metrics, error) {
-	metrics := &pkg.Metrics{}
+	var metrics pkg.Metrics
 
-	queries := map[string]*int64{
-		"SELECT COUNT(*) FROM nodes":                            &metrics.TotalNodes,
-		"SELECT COUNT(*) FROM services":                         &metrics.TotalServices,
-		"SELECT COUNT(*) FROM nodes WHERE status = 'online'":    &metrics.ActiveNodes,
-		"SELECT COUNT(*) FROM services WHERE status = 'active'": &metrics.ActiveServices,
-		"SELECT COUNT(*) FROM events":                           &metrics.TotalEvents,
-		"SELECT COUNT(*) FROM subscriptions":                    &metrics.TotalSubscriptions,
-	}
+	// Count systems
+	row := s.db.QueryRow("SELECT COUNT(*) FROM systems")
+	row.Scan(&metrics.TotalSystems)
+	metrics.ActiveSystems = metrics.TotalSystems // All systems are considered active
 
-	for query, target := range queries {
-		err := s.db.QueryRow(query).Scan(target)
-		if err != nil {
-			return nil, err
-		}
-	}
+	// Count services
+	s.db.QueryRow("SELECT COUNT(*) FROM services").Scan(&metrics.TotalServices)
+	metrics.ActiveServices = metrics.TotalServices // All services are considered active
 
-	return metrics, nil
+	return &metrics, nil
 }
 
 func (s *SQLite) Close() error {

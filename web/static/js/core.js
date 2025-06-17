@@ -4,11 +4,9 @@ console.log('Core.js loaded');
 // Global state  
 let currentView = 'dashboard';
 let currentData = {
-    nodes: [],
+    systems: [],
     services: [],
     authRules: [],
-    events: [],
-    subscriptions: [],
     metrics: {},
     health: {}
 };
@@ -61,22 +59,14 @@ function setupEventListeners() {
         e.preventDefault();
         const type = this.dataset.type;
         console.log('Form submitted with type:', type);
-        if (type === 'login') {
-            console.log('Calling handleLogin');
-            handleLogin(new FormData(this));
-        } else {
-            console.log('Calling submitForm');
-            submitForm();
-        }
+        console.log('Calling submitForm');
+        submitForm();
     });
-
-    // Check authentication status on load
-    checkAuthStatus();
 }
 
 function setupSearchFilters() {
-    const searchInputs = ['nodesSearch', 'servicesSearch', 'authRulesSearch', 'eventsSearch'];
-    const filterSelects = ['nodesFilter', 'servicesFilter', 'eventsFilter', 'networkFilter'];
+    const searchInputs = ['systemsSearch', 'servicesSearch', 'authRulesSearch'];
+    const filterSelects = ['systemsFilter', 'servicesFilter', 'networkFilter'];
 
     searchInputs.forEach(id => {
         const input = document.getElementById(id);

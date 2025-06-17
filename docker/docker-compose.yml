@@ -19,33 +19,6 @@ services:
       timeout: 5s
       retries: 5
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: arrowhead-rabbitmq
-    restart: unless-stopped
-    ports:
-      - "1883:1883"     # MQTT
-      - "15675:15675"   # MQTT WebSocket
-      - "15672:15672"   # Management UI
-      - "5672:5672"     # AMQP (optional)
-    environment:
-      - RABBITMQ_DEFAULT_USER=arrowhead
-      - RABBITMQ_DEFAULT_PASS=arrowhead
-      - RABBITMQ_DEFAULT_VHOST=arrowhead
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    networks:
-      - arrowhead-network
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    command: >
-      bash -c "
-        rabbitmq-plugins enable rabbitmq_mqtt rabbitmq_web_mqtt rabbitmq_management;
-        rabbitmq-server
-      "
 
   arrowhead-lite:
     build:
@@ -128,8 +101,6 @@ services:
 
 volumes:
   postgres_data:
-    driver: local
-  rabbitmq_data:
     driver: local
   prometheus_data:
     driver: local

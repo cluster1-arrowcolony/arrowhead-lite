@@ -19,6 +19,29 @@ func (e *AppError) Error() string {
 	return e.Message
 }
 
+func (e *AppError) StatusCode() int {
+	return e.Code
+}
+
+func (e *AppError) Type() string {
+	switch e.Code {
+	case http.StatusBadRequest:
+		return "BAD_REQUEST"
+	case http.StatusUnauthorized:
+		return "UNAUTHORIZED"
+	case http.StatusForbidden:
+		return "FORBIDDEN"
+	case http.StatusNotFound:
+		return "NOT_FOUND"
+	case http.StatusConflict:
+		return "CONFLICT"
+	case http.StatusInternalServerError:
+		return "INTERNAL_SERVER_ERROR"
+	default:
+		return "UNKNOWN_ERROR"
+	}
+}
+
 func NewAppError(code int, message, details string) *AppError {
 	return &AppError{
 		Code:    code,
@@ -29,12 +52,12 @@ func NewAppError(code int, message, details string) *AppError {
 
 var (
 	ErrServiceNotFound      = NewAppError(http.StatusNotFound, "Service not found", "")
-	ErrNodeNotFound         = NewAppError(http.StatusNotFound, "Node not found", "")
+	ErrSystemNotFound       = NewAppError(http.StatusNotFound, "System not found", "")
 	ErrAuthRuleNotFound     = NewAppError(http.StatusNotFound, "Authorization rule not found", "")
 	ErrSubscriptionNotFound = NewAppError(http.StatusNotFound, "Subscription not found", "")
 
 	ErrServiceAlreadyExists = NewAppError(http.StatusConflict, "Service already exists", "")
-	ErrNodeAlreadyExists    = NewAppError(http.StatusConflict, "Node already exists", "")
+	ErrSystemAlreadyExists  = NewAppError(http.StatusConflict, "System already exists", "")
 
 	ErrInvalidRequest     = NewAppError(http.StatusBadRequest, "Invalid request", "")
 	ErrInvalidCredentials = NewAppError(http.StatusUnauthorized, "Invalid credentials", "")
@@ -79,4 +102,8 @@ func InternalServerError(message string) *AppError {
 // DatabaseError error
 func DatabaseError(err error) *AppError {
 	return NewAppError(http.StatusInternalServerError, "Database error", err.Error())
+}
+
+func ConfigurationError(message string) *AppError {
+	return NewAppError(http.StatusInternalServerError, "Configuration error", message)
 }

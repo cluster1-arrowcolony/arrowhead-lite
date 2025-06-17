@@ -10,10 +10,12 @@ if [ ! -f "bin/arrowhead-lite" ]; then
 fi
 
 echo "🔧 Starting server..."
-echo "Dashboard: http://localhost:8443"
-echo "API: http://localhost:8443/api/v1"
-echo "Health: http://localhost:8443/health"
-echo "Metrics: http://localhost:8443/metrics"
+echo "Dashboard:        http://localhost:8443"
+echo "Service Registry: http://localhost:8443/serviceregistry/mgmt"
+echo "Authorization:    http://localhost:8443/authorization/mgmt/intracloud"
+echo "Orchestration:    http://localhost:8443/orchestrator/orchestration"
+echo "Health:           http://localhost:8443/health"
+echo "Metrics:          http://localhost:8443/metrics"
 echo ""
 echo "Press Ctrl+C to stop"
 echo ""

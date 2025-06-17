@@ -4,8 +4,6 @@ import (
 	"strings"
 	"time"
 
-	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/gateway"
-	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/relay"
 	"github.com/spf13/viper"
 )
 
@@ -15,8 +13,6 @@ type Config struct {
 	Auth     AuthConfig     `mapstructure:"auth"`
 	Logging  LoggingConfig  `mapstructure:"logging"`
 	Health   HealthConfig   `mapstructure:"health"`
-	Gateway  GatewayConfig  `mapstructure:"gateway"`
-	Relay    RelayConfig    `mapstructure:"relay"`
 }
 
 type ServerConfig struct {
@@ -29,9 +25,10 @@ type ServerConfig struct {
 }
 
 type TLSConfig struct {
-	Enabled  bool   `mapstructure:"enabled"`
-	CertFile string `mapstructure:"cert_file"`
-	KeyFile  string `mapstructure:"key_file"`
+	Enabled       bool   `mapstructure:"enabled"`
+	CertFile      string `mapstructure:"cert_file"`
+	KeyFile       string `mapstructure:"key_file"`
+	TruststoreFile string `mapstructure:"truststore_file"`
 }
 
 type CORSConfig struct {
@@ -69,83 +66,6 @@ type HealthConfig struct {
 	CleanupInterval time.Duration `mapstructure:"cleanup_interval"`
 }
 
-type GatewayConfig struct {
-	Enabled         bool             `mapstructure:"enabled"`
-	CloudID         string           `mapstructure:"cloud_id"`
-	CertificateFile string           `mapstructure:"certificate_file"`
-	PrivateKeyFile  string           `mapstructure:"private_key_file"`
-	TrustAnchors    []TrustAnchorCfg `mapstructure:"trust_anchors"`
-	TrustStore      string           `mapstructure:"trust_store"`
-}
-
-type TrustAnchorCfg struct {
-	CloudID         string `mapstructure:"cloud_id"`
-	CertificateFile string `mapstructure:"certificate_file"`
-}
-
-type RelayConfig struct {
-	Enabled     bool                    `mapstructure:"enabled"`
-	Connections []RelayConnectionConfig `mapstructure:"connections"`
-}
-
-type RelayConnectionConfig struct {
-	Name       string `mapstructure:"name"`
-	BrokerType string `mapstructure:"broker_type"`
-	BrokerURL  string `mapstructure:"broker_url"`
-	Username   string `mapstructure:"username"`
-	Password   string `mapstructure:"password"`
-	TLSEnabled bool   `mapstructure:"tls_enabled"`
-	CertPath   string `mapstructure:"cert_path"`
-	KeyPath    string `mapstructure:"key_path"`
-	CACertPath string `mapstructure:"ca_cert_path"`
-	MaxRetries int    `mapstructure:"max_retries"`
-}
-
-// GetGateway returns the gateway configuration compatible with gateway package
-func (c *Config) GetGateway() *gateway.GatewayConfig {
-	// Convert trust anchors
-	trustAnchors := make([]gateway.TrustAnchorCfg, len(c.Gateway.TrustAnchors))
-	for i, ta := range c.Gateway.TrustAnchors {
-		trustAnchors[i] = gateway.TrustAnchorCfg{
-			CloudID:     ta.CloudID,
-			Certificate: ta.CertificateFile,
-		}
-	}
-
-	return &gateway.GatewayConfig{
-		Enabled:         c.Gateway.Enabled,
-		CloudID:         c.Gateway.CloudID,
-		CertificateFile: c.Gateway.CertificateFile,
-		PrivateKeyFile:  c.Gateway.PrivateKeyFile,
-		TrustStore:      c.Gateway.TrustStore,
-		TrustAnchors:    trustAnchors,
-	}
-}
-
-// GetRelay returns the relay configuration compatible with relay package
-func (c *Config) GetRelay() relay.RelayConfig {
-	// Convert connections
-	connections := make([]relay.RelayConnectionConfig, len(c.Relay.Connections))
-	for i, conn := range c.Relay.Connections {
-		connections[i] = relay.RelayConnectionConfig{
-			Name:       conn.Name,
-			BrokerType: conn.BrokerType,
-			BrokerURL:  conn.BrokerURL,
-			Username:   conn.Username,
-			Password:   conn.Password,
-			TLSEnabled: conn.TLSEnabled,
-			CertPath:   conn.CertPath,
-			KeyPath:    conn.KeyPath,
-			CACertPath: conn.CACertPath,
-			MaxRetries: conn.MaxRetries,
-		}
-	}
-
-	return relay.RelayConfig{
-		Enabled:     c.Relay.Enabled,
-		Connections: connections,
-	}
-}
 
 func LoadConfig(configPath string) (*Config, error) {
 	viper.SetConfigName("config")
@@ -184,11 +104,6 @@ func LoadConfig(configPath string) (*Config, error) {
 	viper.SetDefault("health.check_interval", "1m")
 	viper.SetDefault("health.inactive_timeout", "5m")
 	viper.SetDefault("health.cleanup_interval", "10m")
-
-	viper.SetDefault("gateway.enabled", false)
-	viper.SetDefault("gateway.cloud_id", "local-cloud")
-
-	viper.SetDefault("relay.enabled", false)
 
 	viper.AutomaticEnv()
 	viper.SetEnvPrefix("ARROWHEAD")

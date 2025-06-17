@@ -7,13 +7,15 @@ import (
 
 // Database interface for auth storage operations (moved from manager.go)
 type Database interface {
-	GetNode(id string) (*pkg.Node, error)
-	GetService(id string) (*pkg.Service, error)
-	GetAuthRule(id string) (*pkg.AuthRule, error)
-	GetAuthRules(consumerID, providerID, serviceID string) ([]*pkg.AuthRule, error)
-	CreateAuthRule(rule *pkg.AuthRule) error
-	DeleteAuthRule(id string) error
-	ListAuthRules() ([]*pkg.AuthRule, error)
+	GetSystemByID(id int) (*pkg.System, error)
+	GetServiceByID(id int) (*pkg.Service, error)
+	GetAuthorizationByID(id int) (*pkg.Authorization, error)
+	GetAuthorizationsByConsumer(consumerID int) ([]pkg.Authorization, error)
+	GetAuthorizationsByProvider(providerID int) ([]pkg.Authorization, error)
+	CreateAuthorization(auth *pkg.Authorization) error
+	DeleteAuthorizationByID(id int) error
+	ListAuthorizations(sortField, direction string) ([]pkg.Authorization, error)
+	CheckAuthorization(consumerID, providerID, serviceDefinitionID int, interfaceIDs []int) (bool, error)
 }
 
 // NewAuthManager creates a new auth manager instance

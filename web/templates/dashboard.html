@@ -23,8 +23,8 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="#" class="nav-link" data-view="nodes">
-                        🖥️ Nodes
+                    <a href="#" class="nav-link" data-view="systems">
+                        🖥️ Systems
                     </a>
                 </li>
                 <li class="nav-item">
@@ -35,11 +35,6 @@
                 <li class="nav-item">
                     <a href="#" class="nav-link" data-view="auth-rules">
                         🔐 Authorization Rules
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="#" class="nav-link" data-view="events">
-                        📡 Events
                     </a>
                 </li>
                 <li class="nav-item">
@@ -73,9 +68,9 @@
                     <div class="content-body">
                         <div class="stats-grid">
                             <div class="stat-card">
-                                <div class="stat-value" id="totalNodes">{{if .metrics}}{{.metrics.TotalNodes}}{{else}}0{{end}}</div>
-                                <div class="stat-label">Total Nodes</div>
-                                <div class="stat-trend trend-up">↗ Active: <span id="activeNodes">{{if .metrics}}{{.metrics.ActiveNodes}}{{else}}0{{end}}</span></div>
+                                <div class="stat-value" id="totalNodes">{{if .metrics}}{{.metrics.TotalSystems}}{{else}}0{{end}}</div>
+                                <div class="stat-label">Total Systems</div>
+                                <div class="stat-trend trend-up">↗ Active: <span id="activeNodes">{{if .metrics}}{{.metrics.ActiveSystems}}{{else}}0{{end}}</span></div>
                             </div>
                             <div class="stat-card">
                                 <div class="stat-value" id="totalServices">{{if .metrics}}{{.metrics.TotalServices}}{{else}}0{{end}}</div>
@@ -83,9 +78,9 @@
                                 <div class="stat-trend trend-up">↗ Active: <span id="activeServices">{{if .metrics}}{{.metrics.ActiveServices}}{{else}}0{{end}}</span></div>
                             </div>
                             <div class="stat-card">
-                                <div class="stat-value" id="totalEvents">{{if .metrics}}{{.metrics.TotalEvents}}{{else}}0{{end}}</div>
-                                <div class="stat-label">Total Events</div>
-                                <div class="stat-trend">📊 Recent Activity</div>
+                                <div class="stat-value" id="totalEvents">0</div>
+                                <div class="stat-label">Authorization Rules</div>
+                                <div class="stat-trend">🔐 Access Control</div>
                             </div>
                             <div class="stat-card">
                                 <div class="stat-value">{{if .health}}{{.health.health_percentage}}{{else}}0{{end}}%</div>
@@ -115,8 +110,8 @@
                                 </div>
                                 <div style="padding: 20px;">
                                     <div style="display: flex; flex-direction: column; gap: 10px;">
-                                        <button class="btn btn-primary" onclick="showAddModal('node')">
-                                            ➕ Add Node
+                                        <button class="btn btn-primary" onclick="showAddModal('system')">
+                                            ➕ Add System
                                         </button>
                                         <button class="btn btn-primary" onclick="showAddModal('service')">
                                             ➕ Add Service
@@ -134,34 +129,34 @@
                     </div>
                 </div>
 
-                <!-- Nodes View -->
-                <div id="nodesView" class="view hidden">
+                <!-- Systems View -->
+                <div id="systemsView" class="view hidden">
                     <div class="view-controls">
                         <div class="view-tabs">
                             <div class="view-tab active" data-tab="list">📋 List View</div>
                             <div class="view-tab" data-tab="graph">📊 Graph View</div>
                         </div>
                         <div class="filters">
-                            <input type="text" class="search-box" placeholder="Search nodes..." id="nodesSearch">
-                            <select class="filter-select" id="nodesFilter">
-                                <option value="">All Nodes</option>
+                            <input type="text" class="search-box" placeholder="Search systems..." id="systemsSearch">
+                            <select class="filter-select" id="systemsFilter">
+                                <option value="">All Systems</option>
                                 <option value="online">Online Only</option>
                                 <option value="offline">Offline Only</option>
                             </select>
-                            <button class="btn btn-primary btn-sm" onclick="showAddModal('node')">
-                                ➕ Add Node
+                            <button class="btn btn-primary btn-sm" onclick="showAddModal('system')">
+                                ➕ Add System
                             </button>
                         </div>
                     </div>
                     <div class="content-body">
-                        <div id="nodesListView">
+                        <div id="systemsListView">
                             <div class="loading">
                                 <div class="spinner"></div>
-                                Loading nodes...
+                                Loading systems...
                             </div>
                         </div>
-                        <div id="nodesGraphView" class="hidden">
-                            <div class="graph-container" id="nodesGraph"></div>
+                        <div id="systemsGraphView" class="hidden">
+                            <div class="graph-container" id="systemsGraph"></div>
                         </div>
                     </div>
                 </div>
@@ -225,27 +220,6 @@
                     </div>
                 </div>
 
-                <!-- Events View -->
-                <div id="eventsView" class="view hidden">
-                    <div class="view-controls">
-                        <div class="filters">
-                            <input type="text" class="search-box" placeholder="Search events..." id="eventsSearch">
-                            <select class="filter-select" id="eventsFilter">
-                                <option value="">All Events</option>
-                                <option value="publish">Published</option>
-                                <option value="subscribe">Subscriptions</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="content-body">
-                        <div id="eventsListView">
-                            <div class="loading">
-                                <div class="spinner"></div>
-                                Loading events...
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- Network Graph View -->
                 <div id="networkView" class="view hidden">
@@ -253,7 +227,7 @@
                         <div class="filters">
                             <select class="filter-select" id="networkFilter">
                                 <option value="all">Show All</option>
-                                <option value="nodes">Nodes Only</option>
+                                <option value="systems">Systems Only</option>
                                 <option value="services">Services Only</option>
                                 <option value="auth">Authorization Only</option>
                             </select>
@@ -306,5 +280,4 @@
     <script src="/static/js/api.js"></script>
     <script src="/static/js/views.js"></script>
     <script src="/static/js/network.js"></script>
-    <script src="/static/js/auth.js"></script>
 </body>
