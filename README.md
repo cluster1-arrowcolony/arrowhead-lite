@@ -1,17 +1,15 @@
 # Arrowhead IoT Service Mesh
-
-A simplified, unified IoT service mesh node built in Go that replaces Arrowhead Eclipse's complex multi-service architecture with a single, lightweight binary.
+A lightweight IoT service mesh node built in Go that implements the Arrowhead Framework specification in a single, unified binary.
 
 ## Features
-
-- **Single Binary Deployment** - Everything runs in one process, no complex orchestration needed
+- **Single Binary Deployment** - Everything runs in one process with minimal setup
 - **REST API** - Clean HTTP/JSON API for all operations
 - **Service Registry** - Register and discover IoT services
 - **Authentication & Authorization** - JWT-based auth with certificate support
 - **Service Orchestration** - Intelligent service matching and recommendations
 - **Pub/Sub Events** - Real-time event node with WebSocket support
 - **Health Monitoring** - Automatic service health checking
-- **Web Dashboard** - Beautiful monitoring interface
+- **Web Dashboard** - Monitoring interface
 - **PostgreSQL Storage** - Reliable database with full SQL support
 - **Docker Ready** - Complete containerization support
 - **Prometheus Metrics** - Built-in observability
@@ -19,7 +17,6 @@ A simplified, unified IoT service mesh node built in Go that replaces Arrowhead 
 ## Quick Start
 
 ### Local Development
-
 1. **Clone and build:**
 ```bash
 git clone <repo-url>
@@ -49,7 +46,6 @@ The demo script showcases a complete mining IoT scenario with device registratio
 ### Docker Deployment
 
 #### Using Docker Compose (recommended)
-
 The complete development stack includes monitoring and messaging services:
 
 ```bash
@@ -82,7 +78,6 @@ docker-compose down
 ```
 
 #### Using Docker Only
-
 For minimal deployment without monitoring:
 
 ```bash
@@ -127,11 +122,9 @@ The included demo script (`examples/demo.sh`) creates a realistic mining IoT sce
 ```
 🚀 Arrowhead Lite Demo
 ======================
-
 🔍 Checking if arrowhead-lite server is already running...
 ✅ Found existing arrowhead-lite server at http://localhost:8443
 📡 Using existing server for demo
-
 🧪 Testing Go API...
 ...
 🎉 Demo completed successfully!
@@ -335,7 +328,6 @@ export ARROWHEAD_LOGGING_LEVEL=debug
 ```
 
 ### Components
-
 - **Registry**: Service and node registration/discovery
 - **Auth**: JWT tokens, certificates, authorization rules
 - **Orchestration**: Service matching, recommendations, health analysis
@@ -348,7 +340,6 @@ export ARROWHEAD_LOGGING_LEVEL=debug
 The arrowhead-lite server integrates seamlessly with the official **arrowhead-py-sdk**. This provides a clean, standardized way to build Python applications that work with the Arrowhead Framework.
 
 ### Using arrowhead-py-sdk
-
 ```bash
 # Install the official Python SDK
 pip install arrowhead-py-sdk
@@ -358,7 +349,6 @@ pip install arrowhead-py-sdk
 ```
 
 ### Quick Python Example
-
 ```python
 from py_arrowhead import Framework, node, service
 
@@ -389,13 +379,11 @@ See [`examples/python-integration.md`](examples/python-integration.md) for detai
 ## Development
 
 ### Prerequisites
-
 - Go 1.21+
 - PostgreSQL 12+
 - Make
 
 ### Building
-
 ```bash
 # Download dependencies
 make deps
@@ -414,7 +402,6 @@ make check
 ```
 
 ### Testing
-
 ```bash
 # Run all tests
 make test
@@ -427,7 +414,6 @@ open coverage.html
 ```
 
 ### Docker Development
-
 ```bash
 # Start development environment with full stack
 cd docker
@@ -474,7 +460,6 @@ docker-compose exec postgres psql -U arrowhead -d arrowhead -c "SELECT version()
 ## Deployment
 
 ### Production Checklist
-
 1. **Security**:
    - Change default JWT secret
    - Enable TLS with proper certificates
@@ -492,7 +477,6 @@ docker-compose exec postgres psql -U arrowhead -d arrowhead -c "SELECT version()
    - Monitor disk space
 
 ### Kubernetes Deployment
-
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -532,7 +516,6 @@ spec:
 ## Monitoring & Observability
 
 ### Metrics
-
 Prometheus metrics available at `/metrics`:
 - HTTP request duration and count
 - Database connection stats
@@ -540,31 +523,21 @@ Prometheus metrics available at `/metrics`:
 - Event processing metrics
 
 ### Health Checks
-
 - Main health endpoint: `/health`
 - Service-specific health analysis
 - Automatic cleanup of inactive nodes
 - Configurable health check intervals
 
 ### Logging
-
 Structured JSON logging with configurable levels:
 - Request/response logging
 - Service lifecycle events
 - Error tracking and alerting
 - Performance metrics
 
-## Comparison with Arrowhead Eclipse
+## Arrowhead Framework Compatibility
 
-| Feature | Arrowhead Eclipse | Arrowhead Go |
-|---------|------------------|--------------|
-| **Deployment** | Multiple JVMs, complex setup | Single binary |
-| **Database** | MySQL/PostgreSQL required | PostgreSQL |
-| **Memory** | ~2GB+ | ~50MB |
-| **Startup** | 2-5 minutes | 2-5 seconds |
-| **Configuration** | Multiple config files | Single YAML/env vars |
-| **Monitoring** | Manual setup | Built-in dashboard |
-| **Development** | Java/Maven complexity | Simple Go development |
+This implementation follows the Arrowhead Framework specification and provides full compatibility with core Arrowhead services and systems.
 
 ## Contributing
 
