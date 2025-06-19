@@ -5,21 +5,18 @@ A lightweight IoT service mesh node built in Go that implements the Arrowhead Fr
 - **Single Binary Deployment** - Everything runs in one process with minimal setup
 - **REST API** - Clean HTTP/JSON API for all operations
 - **Service Registry** - Register and discover IoT services
-- **Authentication & Authorization** - JWT-based auth with certificate support
+- **Authentication & Authorization** - Certificate-based auth with mTLS support
 - **Service Orchestration** - Intelligent service matching and recommendations
-- **Pub/Sub Events** - Real-time event node with WebSocket support
-- **Health Monitoring** - Automatic service health checking
-- **Web Dashboard** - Monitoring interface
-- **PostgreSQL Storage** - Reliable database with full SQL support
+- **PostgreSQL/SQLite Storage** - Flexible database support
 - **Docker Ready** - Complete containerization support
-- **Prometheus Metrics** - Built-in observability
+- **Certificate Management** - Built-in CA for certificate signing
 
 ## Quick Start
 
 ### Local Development
 1. **Clone and build:**
 ```bash
-git clone <repo-url>
+git clone ssh://github.com/cluster1-arrowcolony/arrowhead-lite.git
 cd arrowhead-lite
 make build
 ```
@@ -39,14 +36,10 @@ http://localhost:8443
 ./examples/demo.sh
 ```
 
-The demo script showcases a complete mining IoT scenario with device registration, service creation, and authorization rules. The script is smart:
-- **With Docker Compose**: Automatically detects and uses the running server
-- **Without server**: Starts its own local instance and cleans up when done
+The demo script showcases a mining IoT scenario with device registration, service creation, and authorization rules.
 
-### Docker Deployment
-
-#### Using Docker Compose (recommended)
-The complete development stack includes monitoring and messaging services:
+### Using Docker Compose
+The complete development stack includes monitoring services:
 
 ```bash
 cd docker
@@ -55,15 +48,13 @@ docker-compose up -d
 
 This starts:
 - **Arrowhead Lite** - Main server on port 8443
-- **PostgreSQL** - Database on port 5432 
-- **RabbitMQ** - MQTT messaging on ports 1883, 15672 (management UI)
+- **PostgreSQL** - Database on port 5432
 - **Prometheus** - Metrics collection on port 9090
 - **Grafana** - Monitoring dashboard on port 3000
 
 **Access Points:**
-- Dashboard: http://localhost:8443
+- Main API: http://localhost:8443
 - Grafana: http://localhost:3000 (admin/admin)
-- RabbitMQ Management: http://localhost:15672 (arrowhead/arrowhead) 
 - Prometheus: http://localhost:9090
 
 **Check Status:**
@@ -97,88 +88,70 @@ docker run -d \
 docker logs arrowhead-lite
 ```
 
-## Demo Script
+## Certificate Generation
 
-The included demo script (`examples/demo.sh`) creates a realistic mining IoT scenario:
+The included certificate generation script (`scripts/generate-certs.sh`) creates a complete set of self-signed TLS certificates and JWT signing keys for secure local development:
 
-```bash
-# Works with both Docker Compose and local development
-./examples/demo.sh
-```
-
-**What it demonstrates:**
-- 6 mining devices (gas detector, vibration monitor, conveyor controller, etc.)
-- 6 services (sensor readings, equipment control, safety alerts)
-- 8 authorization rules (inter-device communication permissions)
-- Admin authentication and service management
-
-**Intelligent behavior:**
-- **Auto-detects existing server**: If you have Docker Compose running, it uses that
-- **Starts local server**: If no server is found, starts a clean local instance
-- **Clean database**: Prevents conflicts by clearing old data when starting locally
-- **Graceful cleanup**: Only stops servers it started, leaves Docker containers alone
-
-**Expected output:**
-```
-🚀 Arrowhead Lite Demo
-======================
-🔍 Checking if arrowhead-lite server is already running...
-✅ Found existing arrowhead-lite server at http://localhost:8443
-📡 Using existing server for demo
-🧪 Testing Go API...
-...
-🎉 Demo completed successfully!
-```
+**Files created:**
+- `certs/truststore.pem` - CA certificate (public certificate for trust verification)
+- `certs/ca.key` - CA private key (for signing other certificates)
+- `certs/server.pem` - Server TLS certificate (for HTTPS connections)
+- `certs/server.key` - Server private key (for HTTPS connections)
+- `certs/sysop.pem` - Admin client certificate (for management operations)
+- `certs/sysop.key` - Admin client private key (for management operations)
+- `certs/sysop.p12` - Admin client PKCS#12 bundle (for SDK integration)
+- `certs/ca.p12` - CA PKCS#12 keystore (for SDK system registration)
+- `certs/auth-private.pem` - JWT signing private key (for token generation)
+- `certs/auth-public.pem` - JWT verification public key (for token validation)
 
 ## API Documentation
 
 ### Service Registry
 
-#### Register a Node
+#### Register a System
 ```bash
-curl -X POST http://localhost:8443/api/v1/registry/nodes \
+curl -X POST http://localhost:8443/serviceregistry/mgmt/systems \
   -H "Content-Type: application/json" \
   -d '{
-    "node": {
-      "name": "my-iot-device",
-      "address": "192.168.1.100",
-      "port": 8080
-    }
+    "systemName": "my-iot-device",
+    "address": "192.168.1.100",
+    "port": 8080
   }'
 ```
 
 #### Register a Service
 ```bash
-curl -X POST http://localhost:8443/api/v1/registry/services \
+curl -X POST http://localhost:8443/serviceregistry/mgmt \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
   -d '{
-    "service": {
-      "name": "temperature-sensor",
-      "node_id": "<node-id>",
-      "definition": "temperature-reading",
-      "uri": "/api/temperature",
-      "method": "GET"
-    }
+    "serviceDefinition": "temperature-reading",
+    "providerSystem": {
+      "systemName": "my-iot-device",
+      "address": "192.168.1.100",
+      "port": 8080
+    },
+    "serviceUri": "/api/temperature",
+    "interfaces": ["HTTP-SECURE-JSON"],
+    "secure": "CERTIFICATE"
   }'
 ```
 
 #### List Services
 ```bash
-curl http://localhost:8443/api/v1/registry/services
+curl http://localhost:8443/serviceregistry/mgmt
 ```
 
 ### Authentication
 
 #### Create Authorization Rule
 ```bash
-curl -X POST http://localhost:8443/api/v1/auth/rules \
+curl -X POST http://localhost:8443/authorization/mgmt/intracloud \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
   -d '{
-    "consumer_id": "<consumer-node-id>",
-    "provider_id": "<provider-node-id>",
-    "service_id": "<service-id>"
+    "consumerId": 1,
+    "providerIds": [2],
+    "serviceDefinitionIds": [1],
+    "interfaceIds": [1]
   }'
 ```
 
@@ -186,58 +159,22 @@ curl -X POST http://localhost:8443/api/v1/auth/rules \
 
 #### Find Services
 ```bash
-curl -X POST http://localhost:8443/api/v1/orchestration \
+curl -X POST http://localhost:8443/orchestrator/orchestration \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
   -d '{
-    "requester_id": "<node-id>",
-    "service_name": "temperature-sensor",
-    "preferences": {
-      "max_results": 5,
-      "preferred_version": "1.0"
+    "requesterSystem": {
+      "systemName": "my-consumer-system",
+      "address": "192.168.1.101",
+      "port": 8081
+    },
+    "requestedService": {
+      "serviceDefinitionRequirement": "temperature-reading"
+    },
+    "orchestrationFlags": {
+      "matchmaking": true,
+      "metadataSearch": true
     }
   }'
-```
-
-### Events & Messaging
-
-#### Publish Event
-```bash
-curl -X POST http://localhost:8443/api/v1/events/publish \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{
-    "type": "sensor-reading",
-    "topic": "temperature",
-    "payload": {
-      "temperature": 23.5,
-      "unit": "celsius",
-      "timestamp": "2024-01-01T12:00:00Z"
-    }
-  }'
-```
-
-#### Subscribe to Events
-```bash
-curl -X POST http://localhost:8443/api/v1/events/subscribe \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{
-    "topic": "temperature",
-    "endpoint": "http://my-service:8080/events",
-    "filters": {
-      "type": "sensor-reading"
-    }
-  }'
-```
-
-#### WebSocket Subscription
-```javascript
-const ws = new WebSocket('ws://localhost:8443/api/v1/events/subscribe/ws?topic=temperature&Authorization=Bearer%20<token>');
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Received event:', data);
-};
 ```
 
 ## Configuration
@@ -253,26 +190,34 @@ Configuration can be provided via:
 server:
   host: "0.0.0.0"
   port: 8443
+  read_timeout: "30s"
+  write_timeout: "30s"
   tls:
-    enabled: false
-    cert_file: "certs/server-cert.pem"
-    key_file: "certs/server-key.pem"
+    enabled: true
+    cert_file: "certs/server.pem"
+    key_file: "certs/server.key"
+    truststore_file: "certs/truststore.pem"
 
 database:
-  type: "postgres"
-  host: "localhost"
-  port: 5432
-  username: "arrowhead"
-  password: "arrowhead"
-  name: "arrowhead"
+  # SQLite (default)
+  type: "sqlite"
+  path: "./arrowhead.db"
+  # PostgreSQL
+  # type: "postgres"
+  # host: "localhost"
+  # port: 5432
+  # username: "arrowhead"
+  # password: "arrowhead"
+  # name: "arrowhead"
 
 auth:
-  jwt_secret: "your-secret-key"
   token_duration: "24h"
+  private_key_file: "certs/auth-private.pem"
+  public_key_file: "certs/auth-public.pem"
 
 logging:
-  level: "info"
-  format: "json"
+  level: "warn"
+  format: "text"
 ```
 
 ### Environment Variables
@@ -282,6 +227,10 @@ logging:
 # Server configuration
 ARROWHEAD_SERVER_HOST=0.0.0.0
 ARROWHEAD_SERVER_PORT=8443
+ARROWHEAD_SERVER_TLS_ENABLED=true
+ARROWHEAD_SERVER_TLS_CERT_FILE=certs/server.pem
+ARROWHEAD_SERVER_TLS_KEY_FILE=certs/server.key
+ARROWHEAD_SERVER_TLS_TRUSTSTORE_FILE=certs/truststore.pem
 
 # Database configuration (PostgreSQL)
 ARROWHEAD_DATABASE_TYPE=postgres
@@ -291,25 +240,22 @@ ARROWHEAD_DATABASE_USERNAME=arrowhead
 ARROWHEAD_DATABASE_PASSWORD=arrowhead
 ARROWHEAD_DATABASE_NAME=arrowhead
 
-# Authentication
-ARROWHEAD_AUTH_JWT_SECRET=your-super-secret-jwt-key-change-this
+# Authentication (RSA key files for JWT signing)
+ARROWHEAD_AUTH_TOKEN_DURATION=24h
+ARROWHEAD_AUTH_PRIVATE_KEY_FILE=certs/auth-private.pem
+ARROWHEAD_AUTH_PUBLIC_KEY_FILE=certs/auth-public.pem
 
 # Logging
 ARROWHEAD_LOGGING_LEVEL=info
 ARROWHEAD_LOGGING_FORMAT=json
-
-# Health monitoring
-ARROWHEAD_HEALTH_CHECK_INTERVAL=1m
-ARROWHEAD_HEALTH_INACTIVE_TIMEOUT=5m
-ARROWHEAD_HEALTH_CLEANUP_INTERVAL=10m
 ```
 
 **Local Development (SQLite):**
 ```bash
 export ARROWHEAD_SERVER_PORT=8443
+export ARROWHEAD_SERVER_TLS_ENABLED=false
 export ARROWHEAD_DATABASE_TYPE=sqlite
 export ARROWHEAD_DATABASE_PATH=./arrowhead.db
-export ARROWHEAD_AUTH_JWT_SECRET=your-super-secret-key
 export ARROWHEAD_LOGGING_LEVEL=debug
 ```
 
@@ -317,64 +263,47 @@ export ARROWHEAD_LOGGING_LEVEL=debug
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Arrowhead IoT Service Mesh              │
+│                    Arrowhead Lite Service Mesh             │
 ├─────────────────────────────────────────────────────────────┤
-│  Web Dashboard  │  REST API  │  WebSocket Events           │
+│                        REST API                             │
 ├─────────────────────────────────────────────────────────────┤
-│  Registry  │  Auth  │  Orchestration  │  Events  │ Health  │
+│     Registry  │  Auth/mTLS  │  Orchestration  │  CA         │
 ├─────────────────────────────────────────────────────────────┤
-│                   PostgreSQL Database                       │
+│                PostgreSQL/SQLite Database                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Components
-- **Registry**: Service and node registration/discovery
-- **Auth**: JWT tokens, certificates, authorization rules
-- **Orchestration**: Service matching, recommendations, health analysis
-- **Events**: Pub/sub messaging with WebSocket support
-- **Health**: Automatic health monitoring and cleanup
-- **Storage**: PostgreSQL database with schema management
+- **Registry**: Service and system registration/discovery
+- **Auth**: Certificate-based authentication with mTLS
+- **Orchestration**: Service matching and recommendations
+- **CA**: Certificate Authority for signing system certificates
+- **Storage**: PostgreSQL/SQLite database with schema management
 
-## Python Integration
+## Client Integration
 
-The arrowhead-lite server integrates seamlessly with the official **arrowhead-py-sdk**. This provides a clean, standardized way to build Python applications that work with the Arrowhead Framework.
+Arrowhead Lite implements the standard Arrowhead 4.x REST API, making it compatible with any HTTP client that can handle certificate-based authentication.
 
-### Using arrowhead-py-sdk
+### Example Client Usage
 ```bash
-# Install the official Python SDK
-pip install arrowhead-py-sdk
+# Register your system first
+curl -X POST https://localhost:8443/serviceregistry/mgmt/systems \
+  --cert client.pem --key client.key \
+  -H "Content-Type: application/json" \
+  -d '{"systemName": "my-client", "address": "localhost", "port": 8080}'
 
-# Start arrowhead-lite server
-./bin/arrowhead-lite
+# Register a service
+curl -X POST https://localhost:8443/serviceregistry/mgmt \
+  --cert client.pem --key client.key \
+  -H "Content-Type: application/json" \
+  -d '{"serviceDefinition": "my-service", "providerSystem": {"systemName": "my-client", "address": "localhost", "port": 8080}, "serviceUri": "/api/data"}'
+
+# Discover services via orchestration
+curl -X POST https://localhost:8443/orchestrator/orchestration \
+  --cert client.pem --key client.key \
+  -H "Content-Type: application/json" \
+  -d '{"requesterSystem": {"systemName": "my-client"}, "requestedService": {"serviceDefinitionRequirement": "my-service"}}'
 ```
-
-### Quick Python Example
-```python
-from py_arrowhead import Framework, node, service
-
-@node("my-python-node")
-class MyPythonNode:
-    def __init__(self, key="python-node"):
-        self.key = key
-    
-    @service("temperature-reading", method="GET", endpoint="/temperature")
-    def get_temperature(self) -> dict:
-        return {"temperature": 23.5, "unit": "celsius"}
-
-# Start the node
-if __name__ == "__main__":
-    node = MyPythonNode()
-    node.start(port=8080)
-```
-
-See [`examples/python-integration.md`](examples/python-integration.md) for detailed setup instructions and examples.
-
-**Key Benefits:**
-- ✅ Official Arrowhead Python SDK support
-- ✅ Clean decorator-based service registration
-- ✅ Automatic service discovery and health checks
-- ✅ Compatible with all Arrowhead Framework features
-- ✅ Simple HTTP/JSON API communication
 
 ## Development
 
@@ -439,7 +368,7 @@ docker-compose down -v
 **Development Workflow:**
 1. Make code changes
 2. Run `docker-compose up --build -d arrowhead-lite` to rebuild only the app
-3. Check logs with `docker-compose logs -f arrowhead-iot-mesh`
+3. Check logs with `docker-compose logs -f arrowhead-lite`
 4. Test at http://localhost:8443
 
 **Troubleshooting:**
@@ -448,10 +377,10 @@ docker-compose down -v
 docker-compose ps
 
 # Restart a specific service
-docker-compose restart arrowhead-iot-mesh
+docker-compose restart arrowhead-lite
 
 # Access container shell for debugging
-docker-compose exec arrowhead-iot-mesh sh
+docker-compose exec arrowhead-lite sh
 
 # Check database connection
 docker-compose exec postgres psql -U arrowhead -d arrowhead -c "SELECT version();"
@@ -515,25 +444,14 @@ spec:
 
 ## Monitoring & Observability
 
-### Metrics
-Prometheus metrics available at `/metrics`:
-- HTTP request duration and count
-- Database connection stats
-- Node and service counts
-- Event processing metrics
-
 ### Health Checks
-- Main health endpoint: `/health`
-- Service-specific health analysis
-- Automatic cleanup of inactive nodes
-- Configurable health check intervals
+- Main health endpoint: `/health` - Returns server health status
 
 ### Logging
-Structured JSON logging with configurable levels:
+Structured logging with configurable levels:
 - Request/response logging
 - Service lifecycle events
-- Error tracking and alerting
-- Performance metrics
+- Error tracking
 
 ## Arrowhead Framework Compatibility
 
