@@ -29,6 +29,7 @@ import (
 func main() {
 	var quiet = flag.Bool("quiet", false, "Disable all logging output")
 	var verbose = flag.Bool("verbose", false, "Enable verbose logging")
+	var disableTLS = flag.Bool("disable-tls", false, "Disable TLS even if enabled in configuration")
 	flag.Parse()
 
 	configPath := os.Getenv("ARROWHEAD_CONFIG")
@@ -43,6 +44,11 @@ func main() {
 		cfg.Logging.Level = "panic" // Only show panic messages
 	} else if *verbose {
 		cfg.Logging.Level = "debug"
+	}
+
+	// Override TLS configuration based on flags
+	if *disableTLS {
+		cfg.Server.TLS.Enabled = false
 	}
 
 	logger := setupLogger(cfg.Logging)
