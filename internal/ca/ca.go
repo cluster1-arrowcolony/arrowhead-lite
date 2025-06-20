@@ -16,17 +16,17 @@ import (
 
 // CertificateAuthority handles certificate signing for new systems
 type CertificateAuthority struct {
-	caCert    *x509.Certificate
-	caKey     *rsa.PrivateKey
-	logger    *logrus.Logger
-	password  string
+	caCert   *x509.Certificate
+	caKey    *rsa.PrivateKey
+	logger   *logrus.Logger
+	password string
 }
 
 // NewCertificateAuthority creates a new CA instance
 func NewCertificateAuthority(caCertPath, caKeyPath, password string, logger *logrus.Logger) (*CertificateAuthority, error) {
 	// For now, we'll create a self-signed CA certificate if none exists
 	// In production, this would load an existing CA certificate and key
-	
+
 	caCert, caKey, err := generateSelfSignedCA()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate CA certificate: %w", err)
@@ -107,11 +107,11 @@ func generateSelfSignedCA() (*x509.Certificate, *rsa.PrivateKey, error) {
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
-			CommonName:    "Arrowhead Lite CA",
-			Organization:  []string{"Arrowhead Framework"},
-			Country:       []string{"SE"},
-			Province:      []string{""},
-			Locality:      []string{"Stockholm"},
+			CommonName:   "Arrowhead Lite CA",
+			Organization: []string{"Arrowhead Framework"},
+			Country:      []string{"SE"},
+			Province:     []string{""},
+			Locality:     []string{"Stockholm"},
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(10, 0, 0), // Valid for 10 years

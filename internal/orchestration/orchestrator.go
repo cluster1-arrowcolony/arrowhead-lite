@@ -38,7 +38,7 @@ func (o *Orchestrator) Orchestrate(req *pkg.OrchestrationRequest) (*pkg.Orchestr
 		"requester_system": req.RequesterSystem.SystemName,
 		"service_def":      req.RequestedService.ServiceDefinitionRequirement,
 		"interfaces":       req.RequestedService.InterfaceRequirements,
-		"flags":           req.OrchestrationFlags,
+		"flags":            req.OrchestrationFlags,
 	}).Debug("Processing orchestration request")
 
 	// Find services matching the request
@@ -76,9 +76,9 @@ func (o *Orchestrator) Orchestrate(req *pkg.OrchestrationRequest) (*pkg.Orchestr
 	}
 
 	o.logger.WithFields(logrus.Fields{
-		"requester_system": req.RequesterSystem.SystemName,
-		"service_def":      req.RequestedService.ServiceDefinitionRequirement,
-		"found_services":   len(matchingServices),
+		"requester_system":  req.RequesterSystem.SystemName,
+		"service_def":       req.RequestedService.ServiceDefinitionRequirement,
+		"found_services":    len(matchingServices),
 		"returned_services": len(matchedServices),
 	}).Info("Orchestration completed")
 
@@ -94,7 +94,7 @@ func (o *Orchestrator) findMatchingServices(req *pkg.OrchestrationRequest) ([]pk
 	}
 
 	matchingServices := make([]pkg.Service, 0)
-	
+
 	for _, service := range allServices {
 		// Check service definition match
 		if !o.matchesServiceDefinition(service, req.RequestedService.ServiceDefinitionRequirement) {
@@ -126,7 +126,6 @@ func (o *Orchestrator) findMatchingServices(req *pkg.OrchestrationRequest) ([]pk
 
 	return matchingServices, nil
 }
-
 
 // matchesServiceDefinition checks if the service matches the requested service definition
 func (o *Orchestrator) matchesServiceDefinition(service pkg.Service, required string) bool {
@@ -162,7 +161,7 @@ func (o *Orchestrator) matchesSecurityRequirements(service pkg.Service, required
 	// For now, we'll accept TOKEN security for all requirements
 	// In a full implementation, this would be more sophisticated
 	serviceSecurity := strings.ToUpper(service.Secure)
-	
+
 	for _, requiredSecurity := range required {
 		requiredSecurity = strings.ToUpper(requiredSecurity)
 		if requiredSecurity == "TOKEN" && serviceSecurity == "TOKEN" {
@@ -227,18 +226,18 @@ func (o *Orchestrator) isAuthorized(requester pkg.RequesterSystem, service pkg.S
 	)
 	if err != nil {
 		o.logger.WithError(err).WithFields(logrus.Fields{
-			"requester":    requester.SystemName,
-			"provider":     service.Provider.SystemName,
-			"service":      service.ServiceDefinition.ServiceDefinition,
+			"requester": requester.SystemName,
+			"provider":  service.Provider.SystemName,
+			"service":   service.ServiceDefinition.ServiceDefinition,
 		}).Warn("Authorization check failed")
 		return false
 	}
 
 	if !authorized {
 		o.logger.WithFields(logrus.Fields{
-			"requester":    requester.SystemName,
-			"provider":     service.Provider.SystemName,
-			"service":      service.ServiceDefinition.ServiceDefinition,
+			"requester": requester.SystemName,
+			"provider":  service.Provider.SystemName,
+			"service":   service.ServiceDefinition.ServiceDefinition,
 		}).Debug("Access denied: no authorization rule found")
 	}
 
@@ -249,7 +248,7 @@ func (o *Orchestrator) isAuthorized(requester pkg.RequesterSystem, service pkg.S
 func (o *Orchestrator) applyOrchestrationFlags(services []pkg.Service, req *pkg.OrchestrationRequest) []pkg.Service {
 	// Apply various orchestration flags
 	// For now, we'll implement basic functionality
-	
+
 	if req.OrchestrationFlags.OnlyPreferred && len(req.PreferredProviders) > 0 {
 		// Filter to only preferred providers
 		preferredServices := make([]pkg.Service, 0)
@@ -382,18 +381,17 @@ func (o *Orchestrator) generateAuthorizationToken(requester pkg.RequesterSystem,
 	}
 
 	// Fallback to simple token generation if AuthManager is not available or fails
-	tokenData := fmt.Sprintf("%s:%s:%s:%d", 
-		requester.SystemName, 
+	tokenData := fmt.Sprintf("%s:%s:%s:%d",
+		requester.SystemName,
 		service.ServiceDefinition.ServiceDefinition,
 		interfaceName,
 		time.Now().Unix())
-	
+
 	randomBytes := make([]byte, 16)
 	if _, err := rand.Read(randomBytes); err != nil {
 		return "", err
 	}
-	
+
 	token := hex.EncodeToString(randomBytes) + ":" + tokenData
 	return token, nil
 }
-

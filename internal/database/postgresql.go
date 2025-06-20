@@ -140,7 +140,7 @@ func (s *PostgreSQLDB) CreateSystem(system *pkg.System) error {
 
 	err := s.db.QueryRow(query, system.SystemName, system.Address, system.Port,
 		system.AuthenticationInfo, metadataJSON, system.CreatedAt, system.UpdatedAt).Scan(&system.ID)
-	
+
 	return err
 }
 
@@ -206,18 +206,18 @@ func (s *PostgreSQLDB) ListSystems(sortField, direction string) ([]pkg.System, e
 		"createdAt":   "created_at",
 		"updatedAt":   "updated_at",
 	}
-	
+
 	// Get safe sort field or default
 	orderBy, ok := safeSortFields[sortField]
 	if !ok {
 		orderBy = "id" // Default sort
 	}
-	
+
 	// Validate direction
 	if direction != "ASC" && direction != "DESC" {
 		direction = "ASC" // Default direction
 	}
-	
+
 	query := fmt.Sprintf(`SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
 		FROM systems ORDER BY %s %s`, orderBy, direction)
 
@@ -507,7 +507,7 @@ func (s *PostgreSQLDB) GetServiceByID(id int) (*pkg.Service, error) {
 		WHERE s.id = $1`
 
 	row := s.db.QueryRow(query, id)
-	
+
 	var service pkg.Service
 	var serviceMetadataJSON, systemMetadataJSON string
 	var serviceCreatedAt, serviceUpdatedAt, sdCreatedAt, sdUpdatedAt, sysCreatedAt, sysUpdatedAt time.Time
@@ -607,18 +607,18 @@ func (s *PostgreSQLDB) ListServices(sortField, direction string) ([]pkg.Service,
 		"uri":       "s.service_uri",
 		"version":   "s.version",
 	}
-	
+
 	// Get safe sort field or default
 	orderBy, ok := safeSortFields[sortField]
 	if !ok {
 		orderBy = "s.id" // Default sort
 	}
-	
+
 	// Validate direction
 	if direction != "ASC" && direction != "DESC" {
 		direction = "ASC" // Default direction
 	}
-	
+
 	// Query to get services with joined system and service definition data
 	query := fmt.Sprintf(`
 		SELECT 
@@ -756,7 +756,7 @@ func (s *PostgreSQLDB) GetAuthorizationByID(id int) (*pkg.Authorization, error) 
 		WHERE a.id = $1`
 
 	row := s.db.QueryRow(query, id)
-	
+
 	var auth pkg.Authorization
 	var consumerMetadataJSON, providerMetadataJSON string
 	var authCreatedAt, authUpdatedAt, consumerCreatedAt, consumerUpdatedAt, providerCreatedAt, providerUpdatedAt, sdCreatedAt, sdUpdatedAt time.Time
@@ -847,18 +847,18 @@ func (s *PostgreSQLDB) ListAuthorizations(sortField, direction string) ([]pkg.Au
 		"createdAt": "a.created_at",
 		"updatedAt": "a.updated_at",
 	}
-	
+
 	// Get safe sort field or default
 	orderBy, ok := safeSortFields[sortField]
 	if !ok {
 		orderBy = "a.id" // Default sort
 	}
-	
+
 	// Validate direction
 	if direction != "ASC" && direction != "DESC" {
 		direction = "ASC" // Default direction
 	}
-	
+
 	// Query to get authorizations with joined consumer, provider, and service definition data
 	query := fmt.Sprintf(`
 		SELECT 
@@ -980,13 +980,13 @@ func (s *PostgreSQLDB) CheckAuthorization(consumerID, providerID, serviceDefinit
 				SELECT COUNT(*) 
 				FROM authorization_interfaces 
 				WHERE authorization_id = $1 AND interface_id = $2`
-			
+
 			var interfaceCount int
 			err := s.db.QueryRow(interfaceQuery, authID, interfaceID).Scan(&interfaceCount)
 			if err != nil {
 				return false, fmt.Errorf("failed to check interface authorization: %w", err)
 			}
-			
+
 			if interfaceCount == 0 {
 				return false, nil // Interface not authorized
 			}
@@ -995,7 +995,6 @@ func (s *PostgreSQLDB) CheckAuthorization(consumerID, providerID, serviceDefinit
 
 	return true, nil
 }
-
 
 // Metrics
 

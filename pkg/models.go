@@ -17,14 +17,14 @@ type SystemRegistration struct {
 
 // System represents an Arrowhead system
 type System struct {
-	ID                  int               `json:"id"`
-	SystemName          string            `json:"systemName"`
-	Address             string            `json:"address"`
-	Port                int               `json:"port"`
-	AuthenticationInfo  string            `json:"authenticationInfo,omitempty"`
-	CreatedAt           *time.Time        `json:"createdAt,omitempty"`
-	UpdatedAt           *time.Time        `json:"updatedAt,omitempty"`
-	Metadata            map[string]string `json:"metadata,omitempty"`
+	ID                 int               `json:"id"`
+	SystemName         string            `json:"systemName"`
+	Address            string            `json:"address"`
+	Port               int               `json:"port"`
+	AuthenticationInfo string            `json:"authenticationInfo,omitempty"`
+	CreatedAt          *time.Time        `json:"createdAt,omitempty"`
+	UpdatedAt          *time.Time        `json:"updatedAt,omitempty"`
+	Metadata           map[string]string `json:"metadata,omitempty"`
 }
 
 // SystemsResponse represents a paginated response of systems
@@ -109,10 +109,10 @@ type ServicesResponse struct {
 
 // AddAuthorizationRequest represents an authorization rule creation request
 type AddAuthorizationRequest struct {
-	ConsumerID             int   `json:"consumerId"`
-	ProviderIDs            []int `json:"providerIds"`
-	InterfaceIDs           []int `json:"interfaceIds"`
-	ServiceDefinitionIDs   []int `json:"serviceDefinitionIds"`
+	ConsumerID           int   `json:"consumerId"`
+	ProviderIDs          []int `json:"providerIds"`
+	InterfaceIDs         []int `json:"interfaceIds"`
+	ServiceDefinitionIDs []int `json:"serviceDefinitionIds"`
 }
 
 // Authorization represents an authorization rule
@@ -158,13 +158,13 @@ type OrchestrationFlags struct {
 
 // Cloud represents an Arrowhead cloud
 type Cloud struct {
-	AuthenticationInfo   string `json:"authenticationInfo"`
-	GatekeeperRelayIDs   []int  `json:"gatekeeperRelayIds"`
-	GatewayRelayIDs      []int  `json:"gatewayRelayIds"`
-	Name                 string `json:"name"`
-	Neighbor             bool   `json:"neighbor"`
-	Operator             string `json:"operator"`
-	Secure               bool   `json:"secure"`
+	AuthenticationInfo string `json:"authenticationInfo"`
+	GatekeeperRelayIDs []int  `json:"gatekeeperRelayIds"`
+	GatewayRelayIDs    []int  `json:"gatewayRelayIds"`
+	Name               string `json:"name"`
+	Neighbor           bool   `json:"neighbor"`
+	Operator           string `json:"operator"`
+	Secure             bool   `json:"secure"`
 }
 
 // PreferredProvider represents a preferred provider for orchestration
@@ -187,33 +187,32 @@ type RequestedService struct {
 
 // OrchestrationRequest represents a request for service orchestration
 type OrchestrationRequest struct {
-	RequesterSystem      RequesterSystem     `json:"requesterSystem"`
-	RequestedService     RequestedService    `json:"requestedService"`
-	OrchestrationFlags   OrchestrationFlags  `json:"orchestrationFlags"`
-	PreferredProviders   []PreferredProvider `json:"preferredProviders,omitempty"`
-	RequesterCloud       *Cloud              `json:"requesterCloud,omitempty"`
-	QoSRequirements      map[string]string   `json:"qosRequirements,omitempty"`
-	Commands             map[string]string   `json:"commands,omitempty"`
+	RequesterSystem    RequesterSystem     `json:"requesterSystem"`
+	RequestedService   RequestedService    `json:"requestedService"`
+	OrchestrationFlags OrchestrationFlags  `json:"orchestrationFlags"`
+	PreferredProviders []PreferredProvider `json:"preferredProviders,omitempty"`
+	RequesterCloud     *Cloud              `json:"requesterCloud,omitempty"`
+	QoSRequirements    map[string]string   `json:"qosRequirements,omitempty"`
+	Commands           map[string]string   `json:"commands,omitempty"`
 }
 
 // MatchedService represents a service matched during orchestration
 type MatchedService struct {
-	Provider             Provider          `json:"provider"`
-	Service              ServiceDefinition `json:"service"`  // Note: field name is "service" not "serviceDefinition"
-	ServiceUri           string            `json:"serviceUri"`
-	Secure               string            `json:"secure"`
-	Metadata             map[string]string `json:"metadata,omitempty"`
-	Interfaces           []Interface       `json:"interfaces"`
-	Version              int               `json:"version"`
-	AuthorizationTokens  map[string]string `json:"authorizationTokens,omitempty"`
-	Warnings             []string          `json:"warnings,omitempty"`
+	Provider            Provider          `json:"provider"`
+	Service             ServiceDefinition `json:"service"` // Note: field name is "service" not "serviceDefinition"
+	ServiceUri          string            `json:"serviceUri"`
+	Secure              string            `json:"secure"`
+	Metadata            map[string]string `json:"metadata,omitempty"`
+	Interfaces          []Interface       `json:"interfaces"`
+	Version             int               `json:"version"`
+	AuthorizationTokens map[string]string `json:"authorizationTokens,omitempty"`
+	Warnings            []string          `json:"warnings,omitempty"`
 }
 
 // OrchestrationResponse represents the response from orchestration
 type OrchestrationResponse struct {
 	Response []MatchedService `json:"response"`
 }
-
 
 // Utility models and errors
 
@@ -232,5 +231,3 @@ type Metrics struct {
 	ActiveSystems  int64 `json:"active_systems"`
 	ActiveServices int64 `json:"active_services"`
 }
-
-

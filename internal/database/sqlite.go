@@ -210,18 +210,18 @@ func (s *SQLite) ListSystems(sortField, direction string) ([]pkg.System, error) 
 		"createdAt":   "created_at",
 		"updatedAt":   "updated_at",
 	}
-	
+
 	// Get safe sort field or default
 	orderBy, ok := safeSortFields[sortField]
 	if !ok {
 		orderBy = "id" // Default sort
 	}
-	
+
 	// Validate direction
 	if direction != "ASC" && direction != "DESC" {
 		direction = "ASC" // Default direction
 	}
-	
+
 	query := fmt.Sprintf(`SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
 		FROM systems ORDER BY %s %s`, orderBy, direction)
 
@@ -538,7 +538,7 @@ func (s *SQLite) GetServiceByID(id int) (*pkg.Service, error) {
 		WHERE s.id = ?`
 
 	row := s.db.QueryRow(query, id)
-	
+
 	var service pkg.Service
 	var serviceMetadataJSON, systemMetadataJSON string
 	var serviceCreatedAt, serviceUpdatedAt, sdCreatedAt, sdUpdatedAt, sysCreatedAt, sysUpdatedAt time.Time
@@ -638,18 +638,18 @@ func (s *SQLite) ListServices(sortField, direction string) ([]pkg.Service, error
 		"uri":       "s.service_uri",
 		"version":   "s.version",
 	}
-	
+
 	// Get safe sort field or default
 	orderBy, ok := safeSortFields[sortField]
 	if !ok {
 		orderBy = "s.id" // Default sort
 	}
-	
+
 	// Validate direction
 	if direction != "ASC" && direction != "DESC" {
 		direction = "ASC" // Default direction
 	}
-	
+
 	// Query to get services with joined system and service definition data
 	query := fmt.Sprintf(`
 		SELECT 
@@ -794,7 +794,7 @@ func (s *SQLite) GetAuthorizationByID(id int) (*pkg.Authorization, error) {
 		WHERE a.id = ?`
 
 	row := s.db.QueryRow(query, id)
-	
+
 	var auth pkg.Authorization
 	var consumerMetadataJSON, providerMetadataJSON string
 	var authCreatedAt, authUpdatedAt, consumerCreatedAt, consumerUpdatedAt, providerCreatedAt, providerUpdatedAt, sdCreatedAt, sdUpdatedAt time.Time
@@ -885,18 +885,18 @@ func (s *SQLite) ListAuthorizations(sortField, direction string) ([]pkg.Authoriz
 		"createdAt": "a.created_at",
 		"updatedAt": "a.updated_at",
 	}
-	
+
 	// Get safe sort field or default
 	orderBy, ok := safeSortFields[sortField]
 	if !ok {
 		orderBy = "a.id" // Default sort
 	}
-	
+
 	// Validate direction
 	if direction != "ASC" && direction != "DESC" {
 		direction = "ASC" // Default direction
 	}
-	
+
 	// Query to get authorizations with joined consumer, provider, and service definition data
 	query := fmt.Sprintf(`
 		SELECT 
@@ -1018,13 +1018,13 @@ func (s *SQLite) CheckAuthorization(consumerID, providerID, serviceDefinitionID 
 				SELECT COUNT(*) 
 				FROM authorization_interfaces 
 				WHERE authorization_id = ? AND interface_id = ?`
-			
+
 			var interfaceCount int
 			err := s.db.QueryRow(interfaceQuery, authID, interfaceID).Scan(&interfaceCount)
 			if err != nil {
 				return false, fmt.Errorf("failed to check interface authorization: %w", err)
 			}
-			
+
 			if interfaceCount == 0 {
 				return false, nil // Interface not authorized
 			}
@@ -1033,7 +1033,6 @@ func (s *SQLite) CheckAuthorization(consumerID, providerID, serviceDefinitionID 
 
 	return true, nil
 }
-
 
 // Metrics
 

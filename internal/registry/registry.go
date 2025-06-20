@@ -88,7 +88,7 @@ func (r *Registry) RegisterSystem(req *pkg.SystemRegistration) (*pkg.System, err
 		existing.Metadata = req.Metadata
 		now := time.Now()
 		existing.UpdatedAt = &now
-		
+
 		if err := r.db.UpdateSystem(existing); err != nil {
 			r.logger.WithError(err).Error("Failed to update existing system")
 			return nil, pkg.DatabaseError(err)
@@ -363,10 +363,10 @@ func (r *Registry) ListServicesWithParams(sortField, direction string) ([]pkg.Se
 // AddAuthorization creates a new authorization rule
 func (r *Registry) AddAuthorization(req *pkg.AddAuthorizationRequest) (*pkg.Authorization, error) {
 	r.logger.WithFields(logrus.Fields{
-		"consumer_id":             req.ConsumerID,
-		"provider_ids":            req.ProviderIDs,
-		"service_definition_ids":  req.ServiceDefinitionIDs,
-		"interface_ids":           req.InterfaceIDs,
+		"consumer_id":            req.ConsumerID,
+		"provider_ids":           req.ProviderIDs,
+		"service_definition_ids": req.ServiceDefinitionIDs,
+		"interface_ids":          req.InterfaceIDs,
 	}).Info("Adding authorization rule")
 
 	// Get consumer system

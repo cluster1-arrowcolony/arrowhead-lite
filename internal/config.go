@@ -25,9 +25,9 @@ type ServerConfig struct {
 }
 
 type TLSConfig struct {
-	Enabled       bool   `mapstructure:"enabled"`
-	CertFile      string `mapstructure:"cert_file"`
-	KeyFile       string `mapstructure:"key_file"`
+	Enabled        bool   `mapstructure:"enabled"`
+	CertFile       string `mapstructure:"cert_file"`
+	KeyFile        string `mapstructure:"key_file"`
 	TruststoreFile string `mapstructure:"truststore_file"`
 }
 
@@ -65,7 +65,6 @@ type HealthConfig struct {
 	InactiveTimeout time.Duration `mapstructure:"inactive_timeout"`
 	CleanupInterval time.Duration `mapstructure:"cleanup_interval"`
 }
-
 
 func LoadConfig(configPath string) (*Config, error) {
 	viper.SetConfigName("config")

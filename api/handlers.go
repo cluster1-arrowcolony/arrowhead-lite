@@ -57,7 +57,7 @@ func (h *Handlers) AuthMiddleware() gin.HandlerFunc {
 
 		// Extract client certificate
 		clientCert := c.Request.TLS.PeerCertificates[0]
-		
+
 		// Extract system name from certificate Common Name
 		systemName := clientCert.Subject.CommonName
 		if systemName == "" {
@@ -96,7 +96,7 @@ func (h *Handlers) AuthMiddleware() gin.HandlerFunc {
 			c.Set("system_name", systemName)
 			c.Set("system_id", systemID)
 			h.logger.WithFields(logrus.Fields{
-				"system": systemName,
+				"system":    systemName,
 				"system_id": systemID,
 			}).Debug("System authenticated via mTLS")
 		}
@@ -509,9 +509,6 @@ func (h *Handlers) HealthCheck(c *gin.Context) {
 		"service":   "arrowhead-lite",
 	})
 }
-
-
-
 
 // Helper method to respond with errors
 func (h *Handlers) respondWithError(c *gin.Context, err *pkg.AppError) {

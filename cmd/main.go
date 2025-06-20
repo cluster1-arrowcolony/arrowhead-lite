@@ -105,15 +105,15 @@ func main() {
 		if err != nil {
 			logger.WithError(err).Fatal("Failed to load truststore, mTLS cannot be enforced.")
 		}
-		
+
 		// The server's certificate doesn't need to be loaded separately here if we use ListenAndServeTLS,
 		// but the tls.Config is the right place for all other settings.
-		
+
 		tlsConfig := &tls.Config{
 			// Certificates will be loaded by ListenAndServeTLS from the config file paths.
-			MinVersion:   tls.VersionTLS12,
-			ClientAuth:   tls.RequireAndVerifyClientCert,
-			ClientCAs:    caCertPool,
+			MinVersion: tls.VersionTLS12,
+			ClientAuth: tls.RequireAndVerifyClientCert,
+			ClientCAs:  caCertPool,
 		}
 		server.TLSConfig = tlsConfig
 
@@ -255,7 +255,7 @@ func setupRouter(
 				// Public read-only routes
 				systems.GET("", h.ListSystems)
 				systems.GET("/:id", h.GetSystemByID)
-				
+
 				// Authenticated write routes
 				if cfg.Server.TLS.Enabled {
 					systems.POST("", h.AuthMiddleware(), h.RegisterSystem)
@@ -272,7 +272,7 @@ func setupRouter(
 				// Public read-only routes
 				services.GET("", h.ListServices)
 				services.GET("/:id", h.GetServiceByID)
-				
+
 				// Authenticated write routes
 				if cfg.Server.TLS.Enabled {
 					services.POST("", h.AuthMiddleware(), h.RegisterServiceMgmt)
@@ -283,11 +283,11 @@ func setupRouter(
 				}
 			}
 		}
-		
+
 		// Public registration endpoints
 		serviceRegistry.POST("/register-system", h.RegisterSystemPublic)
 		serviceRegistry.DELETE("/unregister-system", h.UnregisterSystemPublic)
-		
+
 		// Apply authentication middleware conditionally for service registration
 		if cfg.Server.TLS.Enabled {
 			serviceRegistry.POST("/register", h.AuthMiddleware(), h.RegisterService)
@@ -311,7 +311,7 @@ func setupRouter(
 				authMgmt.POST("/intracloud", h.AddAuthorization)
 				authMgmt.DELETE("/intracloud/:id", h.RemoveAuthorization)
 			}
-			
+
 			// Public, read-only routes
 			authMgmt.GET("/intracloud", h.ListAuthorizations)
 		}
@@ -327,7 +327,6 @@ func setupRouter(
 			orchestrator.POST("/orchestration", h.Orchestrate)
 		}
 	}
-
 
 	router.Static("/static", "./web/static")
 	router.LoadHTMLGlob("web/templates/*")
@@ -403,16 +402,16 @@ func loadTrustStore(truststoreFile string) (*x509.CertPool, error) {
 	if truststoreFile == "" {
 		return nil, fmt.Errorf("truststore file not specified")
 	}
-	
+
 	caCert, err := os.ReadFile(truststoreFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read truststore file: %w", err)
 	}
-	
+
 	caCertPool := x509.NewCertPool()
 	if !caCertPool.AppendCertsFromPEM(caCert) {
 		return nil, fmt.Errorf("failed to parse CA certificate from truststore")
 	}
-	
+
 	return caCertPool, nil
 }

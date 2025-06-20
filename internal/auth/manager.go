@@ -19,9 +19,9 @@ type Claims struct {
 }
 
 type AuthManager struct {
-	db        Database
-	logger    *logrus.Logger
-	jwtSecret []byte
+	db         Database
+	logger     *logrus.Logger
+	jwtSecret  []byte
 	privateKey *rsa.PrivateKey
 	publicKey  *rsa.PublicKey
 }

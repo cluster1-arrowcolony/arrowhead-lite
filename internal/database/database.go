@@ -48,7 +48,6 @@ type Database interface {
 	ListAuthorizations(sortField, direction string) ([]pkg.Authorization, error)
 	CheckAuthorization(consumerID, providerID, serviceDefinitionID int, interfaceIDs []int) (bool, error)
 
-
 	// Metrics
 	GetMetrics() (*pkg.Metrics, error)
 
