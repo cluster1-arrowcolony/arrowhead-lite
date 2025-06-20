@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+        cache: true
+    
+    - name: Get tag
+      id: tag
+      run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+    
+    - name: Build for Linux
+      run: |
+        CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=${{ steps.tag.outputs.tag }} -X main.buildTime=$(date -u '+%Y-%m-%dT%H:%M:%S') -X main.gitCommit=$(git rev-parse --short HEAD)" -o arrowhead-lite-linux-amd64 ./cmd/main.go
+    
+    - name: Build for Windows
+      run: |
+        sudo apt-get update && sudo apt-get install -y gcc-mingw-w64
+        CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc go build -ldflags "-X main.version=${{ steps.tag.outputs.tag }} -X main.buildTime=$(date -u '+%Y-%m-%dT%H:%M:%S') -X main.gitCommit=$(git rev-parse --short HEAD)" -o arrowhead-lite-windows-amd64.exe ./cmd/main.go
+    
+    - name: Build for macOS
+      run: |
+        CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=${{ steps.tag.outputs.tag }} -X main.buildTime=$(date -u '+%Y-%m-%dT%H:%M:%S') -X main.gitCommit=$(git rev-parse --short HEAD)" -o arrowhead-lite-darwin-amd64 ./cmd/main.go
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        if [ -f CHANGELOG.md ]; then
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          awk '/^## \[/{if(p) exit; p=1} p' CHANGELOG.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        else
+          echo "changelog=Release ${{ steps.tag.outputs.tag }}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          arrowhead-lite-linux-amd64
+          arrowhead-lite-windows-amd64.exe
+          arrowhead-lite-darwin-amd64
+        body: ${{ steps.changelog.outputs.changelog }}
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,4 +1,4 @@
-.PHONY: all build test install clean
+.PHONY: all build test install clean check fmt vet lint security
 
 # Build variables
 VERSION ?= 1.0.0
@@ -26,5 +26,56 @@ clean:
 
 dev: build
 	./bin/arrowhead-lite
+
+# Code quality and security checks
+fmt:
+	@echo "Checking formatting..."
+	@if [ "$$(gofmt -s -l . | wc -l)" -gt 0 ]; then \
+		echo "Go code is not formatted. Please run 'gofmt -s -w .'"; \
+		gofmt -s -l .; \
+		exit 1; \
+	fi
+
+vet:
+	@echo "Running go vet..."
+	go vet ./...
+
+lint:
+	@echo "Running golangci-lint..."
+	@command -v golangci-lint >/dev/null 2>&1 || { \
+		echo "Installing golangci-lint..."; \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
+	}
+	golangci-lint run --timeout=5m
+	@echo "Running staticcheck..."
+	@command -v staticcheck >/dev/null 2>&1 || { \
+		echo "Installing staticcheck..."; \
+		go install honnef.co/go/tools/cmd/staticcheck@latest; \
+	}
+	staticcheck ./...
+
+security:
+	@echo "Running security checks..."
+	@command -v govulncheck >/dev/null 2>&1 || { \
+		echo "Installing govulncheck..."; \
+		go install golang.org/x/vuln/cmd/govulncheck@latest; \
+	}
+	govulncheck ./...
+	@command -v gosec >/dev/null 2>&1 || { \
+		echo "Installing gosec..."; \
+		go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; \
+	}
+	gosec ./...
+
+check: fmt vet lint security test
+	@echo "Verifying dependencies..."
+	go mod verify
+	@echo "Checking if go.mod is tidy..."
+	go mod tidy
+	@git diff --exit-code go.mod go.sum || { \
+		echo "go.mod or go.sum is not tidy. Please run 'go mod tidy'"; \
+		exit 1; \
+	}
+	@echo "All checks passed!"
 
 .DEFAULT_GOAL := build

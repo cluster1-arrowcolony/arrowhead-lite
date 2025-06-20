@@ -1,0 +1,29 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+        cache: true
+    
+    - name: Check formatting
+      run: make fmt
+    
+    - name: Run go vet
+      run: make vet
+    
+    - name: Run linting
+      run: make lint
