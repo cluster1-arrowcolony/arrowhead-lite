@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -179,7 +180,7 @@ func setupLogger(cfg internal.LoggingConfig) *logrus.Logger {
 	}
 
 	if cfg.File != "" {
-		file, err := os.OpenFile(cfg.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		file, err := os.OpenFile(cfg.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 		if err != nil {
 			logger.WithError(err).Warn("Failed to open log file, using stdout")
 		} else {
@@ -403,6 +404,12 @@ func loadTrustStore(truststoreFile string) (*x509.CertPool, error) {
 		return nil, fmt.Errorf("truststore file not specified")
 	}
 
+	// Basic path validation to prevent directory traversal
+	if strings.Contains(truststoreFile, "..") {
+		return nil, fmt.Errorf("invalid truststore file path")
+	}
+
+	// #nosec G304 - truststore file path is validated and this is a legitimate certificate loading operation
 	caCert, err := os.ReadFile(truststoreFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read truststore file: %w", err)

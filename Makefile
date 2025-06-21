@@ -46,13 +46,13 @@ lint:
 		echo "Installing golangci-lint..."; \
 		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
 	}
-	golangci-lint run --timeout=5m
+	$(shell go env GOPATH)/bin/golangci-lint run --timeout=5m
 	@echo "Running staticcheck..."
 	@command -v staticcheck >/dev/null 2>&1 || { \
 		echo "Installing staticcheck..."; \
 		go install honnef.co/go/tools/cmd/staticcheck@latest; \
 	}
-	staticcheck ./...
+	$(shell go env GOPATH)/bin/staticcheck ./...
 
 security:
 	@echo "Running security checks..."
@@ -60,12 +60,12 @@ security:
 		echo "Installing govulncheck..."; \
 		go install golang.org/x/vuln/cmd/govulncheck@latest; \
 	}
-	govulncheck ./...
+	$(shell go env GOPATH)/bin/govulncheck ./...
 	@command -v gosec >/dev/null 2>&1 || { \
 		echo "Installing gosec..."; \
-		go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; \
+		go install github.com/securego/gosec/v2/cmd/gosec@latest; \
 	}
-	gosec ./...
+	$(shell go env GOPATH)/bin/gosec ./...
 
 check: fmt vet lint security test
 	@echo "Verifying dependencies..."

@@ -222,8 +222,9 @@ func (s *SQLite) ListSystems(sortField, direction string) ([]pkg.System, error) 
 		direction = "ASC" // Default direction
 	}
 
-	query := fmt.Sprintf(`SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
-		FROM systems ORDER BY %s %s`, orderBy, direction)
+	// #nosec G202 - orderBy and direction are validated against whitelisted values
+	query := `SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
+		FROM systems ORDER BY ` + orderBy + ` ` + direction
 
 	rows, err := s.db.Query(query)
 	if err != nil {
@@ -261,7 +262,7 @@ func (s *SQLite) scanSystem(row *sql.Row) (*pkg.System, error) {
 	system.UpdatedAt = &updatedAt
 
 	if metadataJSON != "" && metadataJSON != "{}" {
-		json.Unmarshal([]byte(metadataJSON), &system.Metadata)
+		_ = json.Unmarshal([]byte(metadataJSON), &system.Metadata)
 	}
 
 	return &system, nil
@@ -282,7 +283,7 @@ func (s *SQLite) scanSystemFromRows(rows *sql.Rows) (*pkg.System, error) {
 	system.UpdatedAt = &updatedAt
 
 	if metadataJSON != "" && metadataJSON != "{}" {
-		json.Unmarshal([]byte(metadataJSON), &system.Metadata)
+		_ = json.Unmarshal([]byte(metadataJSON), &system.Metadata)
 	}
 
 	return &system, nil
@@ -475,7 +476,7 @@ func (s *SQLite) CreateService(service *pkg.Service) error {
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Serialize metadata
 	metadataJSON := "{}"
@@ -566,10 +567,10 @@ func (s *SQLite) GetServiceByID(id int) (*pkg.Service, error) {
 
 	// Parse metadata
 	if serviceMetadataJSON != "" && serviceMetadataJSON != "{}" {
-		json.Unmarshal([]byte(serviceMetadataJSON), &service.Metadata)
+		_ = json.Unmarshal([]byte(serviceMetadataJSON), &service.Metadata)
 	}
 	if systemMetadataJSON != "" && systemMetadataJSON != "{}" {
-		json.Unmarshal([]byte(systemMetadataJSON), &service.Provider.Metadata)
+		_ = json.Unmarshal([]byte(systemMetadataJSON), &service.Provider.Metadata)
 	}
 
 	// Get interfaces for this service
@@ -651,7 +652,8 @@ func (s *SQLite) ListServices(sortField, direction string) ([]pkg.Service, error
 	}
 
 	// Query to get services with joined system and service definition data
-	query := fmt.Sprintf(`
+	// #nosec G202 - orderBy and direction are validated against whitelisted values
+	query := `
 		SELECT 
 			s.id, s.service_uri, s.end_of_validity, s.secure, s.metadata, s.version, s.created_at, s.updated_at,
 			sd.id, sd.service_definition, sd.created_at, sd.updated_at,
@@ -659,7 +661,7 @@ func (s *SQLite) ListServices(sortField, direction string) ([]pkg.Service, error
 		FROM services s
 		JOIN service_definitions sd ON s.service_definition_id = sd.id
 		JOIN systems sys ON s.provider_id = sys.id
-		ORDER BY %s %s`, orderBy, direction)
+		ORDER BY ` + orderBy + ` ` + direction
 
 	rows, err := s.db.Query(query)
 	if err != nil {
@@ -693,10 +695,10 @@ func (s *SQLite) ListServices(sortField, direction string) ([]pkg.Service, error
 
 		// Parse metadata
 		if serviceMetadataJSON != "" && serviceMetadataJSON != "{}" {
-			json.Unmarshal([]byte(serviceMetadataJSON), &service.Metadata)
+			_ = json.Unmarshal([]byte(serviceMetadataJSON), &service.Metadata)
 		}
 		if systemMetadataJSON != "" && systemMetadataJSON != "{}" {
-			json.Unmarshal([]byte(systemMetadataJSON), &service.Provider.Metadata)
+			_ = json.Unmarshal([]byte(systemMetadataJSON), &service.Provider.Metadata)
 		}
 
 		// Get interfaces for this service
@@ -718,7 +720,7 @@ func (s *SQLite) ListServices(sortField, direction string) ([]pkg.Service, error
 
 			err := interfaceRows.Scan(&iface.ID, &iface.InterfaceName, &ifaceCreatedAt, &ifaceUpdatedAt)
 			if err != nil {
-				interfaceRows.Close()
+				_ = interfaceRows.Close()
 				return nil, fmt.Errorf("failed to scan interface row: %w", err)
 			}
 
@@ -726,7 +728,7 @@ func (s *SQLite) ListServices(sortField, direction string) ([]pkg.Service, error
 			iface.UpdatedAt = &ifaceUpdatedAt
 			interfaces = append(interfaces, iface)
 		}
-		interfaceRows.Close()
+		_ = interfaceRows.Close()
 
 		service.Interfaces = interfaces
 		services = append(services, service)
@@ -743,7 +745,7 @@ func (s *SQLite) CreateAuthorization(auth *pkg.Authorization) error {
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Insert authorization into authorizations table
 	query := `INSERT INTO authorizations (consumer_id, provider_id, service_definition_id, created_at, updated_at)
@@ -823,10 +825,10 @@ func (s *SQLite) GetAuthorizationByID(id int) (*pkg.Authorization, error) {
 
 	// Parse metadata
 	if consumerMetadataJSON != "" && consumerMetadataJSON != "{}" {
-		json.Unmarshal([]byte(consumerMetadataJSON), &auth.ConsumerSystem.Metadata)
+		_ = json.Unmarshal([]byte(consumerMetadataJSON), &auth.ConsumerSystem.Metadata)
 	}
 	if providerMetadataJSON != "" && providerMetadataJSON != "{}" {
-		json.Unmarshal([]byte(providerMetadataJSON), &auth.ProviderSystem.Metadata)
+		_ = json.Unmarshal([]byte(providerMetadataJSON), &auth.ProviderSystem.Metadata)
 	}
 
 	// Get interfaces for this authorization
@@ -898,7 +900,8 @@ func (s *SQLite) ListAuthorizations(sortField, direction string) ([]pkg.Authoriz
 	}
 
 	// Query to get authorizations with joined consumer, provider, and service definition data
-	query := fmt.Sprintf(`
+	// #nosec G202 - orderBy and direction are validated against whitelisted values
+	query := `
 		SELECT 
 			a.id, a.created_at, a.updated_at,
 			consumer.id, consumer.system_name, consumer.address, consumer.port, consumer.authentication_info, consumer.metadata, consumer.created_at, consumer.updated_at,
@@ -908,7 +911,7 @@ func (s *SQLite) ListAuthorizations(sortField, direction string) ([]pkg.Authoriz
 		JOIN systems consumer ON a.consumer_id = consumer.id
 		JOIN systems provider ON a.provider_id = provider.id
 		JOIN service_definitions sd ON a.service_definition_id = sd.id
-		ORDER BY %s %s`, orderBy, direction)
+		ORDER BY ` + orderBy + ` ` + direction
 
 	rows, err := s.db.Query(query)
 	if err != nil {
@@ -943,10 +946,10 @@ func (s *SQLite) ListAuthorizations(sortField, direction string) ([]pkg.Authoriz
 
 		// Parse metadata
 		if consumerMetadataJSON != "" && consumerMetadataJSON != "{}" {
-			json.Unmarshal([]byte(consumerMetadataJSON), &auth.ConsumerSystem.Metadata)
+			_ = json.Unmarshal([]byte(consumerMetadataJSON), &auth.ConsumerSystem.Metadata)
 		}
 		if providerMetadataJSON != "" && providerMetadataJSON != "{}" {
-			json.Unmarshal([]byte(providerMetadataJSON), &auth.ProviderSystem.Metadata)
+			_ = json.Unmarshal([]byte(providerMetadataJSON), &auth.ProviderSystem.Metadata)
 		}
 
 		// Get interfaces for this authorization
@@ -968,7 +971,7 @@ func (s *SQLite) ListAuthorizations(sortField, direction string) ([]pkg.Authoriz
 
 			err := interfaceRows.Scan(&iface.ID, &iface.InterfaceName, &ifaceCreatedAt, &ifaceUpdatedAt)
 			if err != nil {
-				interfaceRows.Close()
+				_ = interfaceRows.Close()
 				return nil, fmt.Errorf("failed to scan interface row: %w", err)
 			}
 
@@ -976,7 +979,7 @@ func (s *SQLite) ListAuthorizations(sortField, direction string) ([]pkg.Authoriz
 			iface.UpdatedAt = &ifaceUpdatedAt
 			interfaces = append(interfaces, iface)
 		}
-		interfaceRows.Close()
+		_ = interfaceRows.Close()
 
 		auth.Interfaces = interfaces
 		authorizations = append(authorizations, auth)
@@ -1041,11 +1044,11 @@ func (s *SQLite) GetMetrics() (*pkg.Metrics, error) {
 
 	// Count systems
 	row := s.db.QueryRow("SELECT COUNT(*) FROM systems")
-	row.Scan(&metrics.TotalSystems)
+	_ = row.Scan(&metrics.TotalSystems)
 	metrics.ActiveSystems = metrics.TotalSystems // All systems are considered active
 
 	// Count services
-	s.db.QueryRow("SELECT COUNT(*) FROM services").Scan(&metrics.TotalServices)
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM services").Scan(&metrics.TotalServices)
 	metrics.ActiveServices = metrics.TotalServices // All services are considered active
 
 	return &metrics, nil

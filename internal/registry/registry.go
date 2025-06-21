@@ -607,7 +607,7 @@ func (r *Registry) generateAuthID() int {
 func (r *Registry) generateRandomID() int {
 	// Generate a random ID (in real implementation, this would be handled by database auto-increment)
 	randomBytes := make([]byte, 4)
-	rand.Read(randomBytes)
+	_, _ = rand.Read(randomBytes)
 	id := int(randomBytes[0])<<24 | int(randomBytes[1])<<16 | int(randomBytes[2])<<8 | int(randomBytes[3])
 	if id < 0 {
 		id = -id
