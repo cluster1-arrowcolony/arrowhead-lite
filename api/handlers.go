@@ -123,7 +123,12 @@ func (h *Handlers) RegisterSystem(c *gin.Context) {
 	// Convert to internal format and register
 	system, err := h.registry.RegisterSystem(&req)
 	if err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in RegisterSystem")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -145,7 +150,12 @@ func (h *Handlers) RegisterSystemPublic(c *gin.Context) {
 
 	system, err := h.registry.RegisterSystem(&req)
 	if err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in RegisterSystemPublic")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -170,7 +180,12 @@ func (h *Handlers) RegisterSystemWithCertificate(c *gin.Context) {
 	// Register the system first
 	system, err := h.registry.RegisterSystem(&req)
 	if err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in RegisterSystemWithCertificate")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -210,7 +225,12 @@ func (h *Handlers) UnregisterSystemByID(c *gin.Context) {
 	}
 
 	if err := h.registry.UnregisterSystemByID(systemID); err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in UnregisterSystemByID")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -235,7 +255,12 @@ func (h *Handlers) UnregisterSystemPublic(c *gin.Context) {
 	}
 
 	if err := h.registry.UnregisterSystemByParams(systemName, address, port); err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in UnregisterSystemPublic")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -253,7 +278,12 @@ func (h *Handlers) GetSystemByID(c *gin.Context) {
 
 	system, err := h.registry.GetSystemByID(systemID)
 	if err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in GetSystemByID")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -268,7 +298,12 @@ func (h *Handlers) ListSystems(c *gin.Context) {
 
 	systems, err := h.registry.ListSystemsWithParams(sortField, direction)
 	if err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in ListSystems")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -292,7 +327,12 @@ func (h *Handlers) RegisterServiceMgmt(c *gin.Context) {
 
 	service, err := h.registry.RegisterServiceMgmt(&req)
 	if err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in RegisterServiceMgmt")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -317,7 +357,12 @@ func (h *Handlers) RegisterService(c *gin.Context) {
 
 	service, err := h.registry.RegisterService(&req)
 	if err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in RegisterService")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -334,7 +379,12 @@ func (h *Handlers) UnregisterServiceByID(c *gin.Context) {
 	}
 
 	if err := h.registry.UnregisterServiceByID(serviceID); err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in UnregisterServiceByID")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -361,7 +411,12 @@ func (h *Handlers) UnregisterService(c *gin.Context) {
 	}
 
 	if err := h.registry.UnregisterServiceByParams(systemName, serviceURI, serviceDefinition, address, port); err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in UnregisterService")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -379,7 +434,12 @@ func (h *Handlers) GetServiceByID(c *gin.Context) {
 
 	service, err := h.registry.GetServiceByID(serviceID)
 	if err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in GetServiceByID")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -394,7 +454,12 @@ func (h *Handlers) ListServices(c *gin.Context) {
 
 	services, err := h.registry.ListServicesWithParams(sortField, direction)
 	if err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in ListServices")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -418,7 +483,12 @@ func (h *Handlers) AddAuthorization(c *gin.Context) {
 
 	authorization, err := h.registry.AddAuthorization(&req)
 	if err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in AddAuthorization")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -441,7 +511,12 @@ func (h *Handlers) RemoveAuthorization(c *gin.Context) {
 	}
 
 	if err := h.registry.RemoveAuthorization(authID); err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in RemoveAuthorization")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -456,7 +531,12 @@ func (h *Handlers) ListAuthorizations(c *gin.Context) {
 
 	authorizations, err := h.registry.ListAuthorizationsWithParams(sortField, direction)
 	if err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in ListAuthorizations")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
@@ -492,7 +572,12 @@ func (h *Handlers) Orchestrate(c *gin.Context) {
 
 	response, err := h.orchestrator.Orchestrate(&req)
 	if err != nil {
-		h.respondWithError(c, err.(*pkg.AppError))
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in Orchestrate")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
 		return
 	}
 
