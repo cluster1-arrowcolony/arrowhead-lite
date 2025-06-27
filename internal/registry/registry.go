@@ -1,7 +1,6 @@
 package registry
 
 import (
-	"crypto/rand"
 	"fmt"
 	"strconv"
 	"time"
@@ -99,7 +98,6 @@ func (r *Registry) RegisterSystem(req *pkg.SystemRegistration) (*pkg.System, err
 	// Create new system
 	now := time.Now()
 	system := &pkg.System{
-		ID:                 r.generateSystemID(), // Will be overridden by database
 		SystemName:         req.SystemName,
 		Address:            req.Address,
 		Port:               req.Port,
@@ -262,7 +260,6 @@ func (r *Registry) registerService(req *pkg.ServiceRegistrationRequest, isManage
 	}
 
 	service := &pkg.Service{
-		ID:                r.generateServiceID(), // Will be overridden by database
 		ServiceDefinition: *serviceDef,
 		Provider:          *provider,
 		ServiceUri:        req.ServiceUri,
@@ -419,7 +416,6 @@ func (r *Registry) AddAuthorization(req *pkg.AddAuthorizationRequest) (*pkg.Auth
 	// Create authorization
 	now := time.Now()
 	authorization := &pkg.Authorization{
-		ID:                r.generateAuthID(), // Will be overridden by database
 		ConsumerSystem:    *consumer,
 		ProviderSystem:    providerForAuth,
 		ServiceDefinition: *serviceDef,
@@ -500,7 +496,6 @@ func (r *Registry) getOrCreateProvider(providerSystem *pkg.ProviderSystem) (*pkg
 	// Create new system
 	now := time.Now()
 	newSystem := &pkg.System{
-		ID:                 r.generateSystemID(),
 		SystemName:         providerSystem.SystemName,
 		Address:            providerSystem.Address,
 		Port:               providerSystem.Port,
@@ -538,7 +533,6 @@ func (r *Registry) getOrCreateServiceDefinition(serviceDefinition string) (*pkg.
 	// Create new service definition
 	now := time.Now()
 	serviceDef := &pkg.ServiceDefinition{
-		ID:                r.generateServiceDefID(),
 		ServiceDefinition: serviceDefinition,
 		CreatedAt:         &now,
 		UpdatedAt:         &now,
@@ -566,7 +560,6 @@ func (r *Registry) getOrCreateInterfaces(interfaceNames []string) ([]pkg.Interfa
 		// Create new interface
 		now := time.Now()
 		iface := &pkg.Interface{
-			ID:            r.generateInterfaceID(),
 			InterfaceName: interfaceName,
 			CreatedAt:     &now,
 			UpdatedAt:     &now,
@@ -581,41 +574,6 @@ func (r *Registry) getOrCreateInterfaces(interfaceNames []string) ([]pkg.Interfa
 	}
 
 	return interfaces, nil
-}
-
-// ID generation methods (these would be replaced by database auto-increment)
-func (r *Registry) generateSystemID() int {
-	return r.generateRandomID()
-}
-
-func (r *Registry) generateServiceID() int {
-	return r.generateRandomID()
-}
-
-func (r *Registry) generateServiceDefID() int {
-	return r.generateRandomID()
-}
-
-func (r *Registry) generateInterfaceID() int {
-	return r.generateRandomID()
-}
-
-func (r *Registry) generateAuthID() int {
-	return r.generateRandomID()
-}
-
-func (r *Registry) generateRandomID() int {
-	// Generate a random ID (in real implementation, this would be handled by database auto-increment)
-	randomBytes := make([]byte, 4)
-	_, _ = rand.Read(randomBytes)
-	id := int(randomBytes[0])<<24 | int(randomBytes[1])<<16 | int(randomBytes[2])<<8 | int(randomBytes[3])
-	if id < 0 {
-		id = -id
-	}
-	if id == 0 {
-		id = 1
-	}
-	return id
 }
 
 // GetMetrics returns registry metrics
