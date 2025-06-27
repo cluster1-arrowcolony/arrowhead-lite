@@ -357,43 +357,25 @@ func (r *Registry) ListServicesWithParams(sortField, direction string) ([]pkg.Se
 
 // Authorization Management Methods
 
-// AddAuthorization creates a new authorization rule
-func (r *Registry) AddAuthorization(req *pkg.AddAuthorizationRequest) (*pkg.Authorization, error) {
+// AddAuthorization creates new authorization rules
+func (r *Registry) AddAuthorization(req *pkg.AddAuthorizationRequest) ([]pkg.Authorization, error) {
 	r.logger.WithFields(logrus.Fields{
 		"consumer_id":            req.ConsumerID,
 		"provider_ids":           req.ProviderIDs,
 		"service_definition_ids": req.ServiceDefinitionIDs,
 		"interface_ids":          req.InterfaceIDs,
-	}).Info("Adding authorization rule")
+	}).Info("Adding authorization rules")
 
-	// Get consumer system
 	consumer, err := r.db.GetSystemByID(req.ConsumerID)
 	if err != nil || consumer == nil {
 		return nil, pkg.NotFoundError("Consumer system not found")
 	}
 
-	// For simplicity, create authorization for the first provider and service definition
 	if len(req.ProviderIDs) == 0 || len(req.ServiceDefinitionIDs) == 0 {
 		return nil, pkg.BadRequestError("Provider IDs and Service Definition IDs are required")
 	}
 
-	providerID := req.ProviderIDs[0]
-	serviceDefID := req.ServiceDefinitionIDs[0]
-
-	// Get provider system
-	provider, err := r.db.GetSystemByID(providerID)
-	if err != nil || provider == nil {
-		return nil, pkg.NotFoundError("Provider system not found")
-	}
-
-	// Get service definition
-	serviceDef, err := r.db.GetServiceDefinitionByID(serviceDefID)
-	if err != nil || serviceDef == nil {
-		return nil, pkg.NotFoundError("Service definition not found")
-	}
-
-	// Get interfaces
-	interfaces := make([]pkg.Interface, 0)
+	interfaces := make([]pkg.Interface, 0, len(req.InterfaceIDs))
 	for _, interfaceID := range req.InterfaceIDs {
 		iface, err := r.db.GetInterfaceByID(interfaceID)
 		if err == nil && iface != nil {
@@ -401,36 +383,38 @@ func (r *Registry) AddAuthorization(req *pkg.AddAuthorizationRequest) (*pkg.Auth
 		}
 	}
 
-	// Convert System to Provider for authorization
-	providerForAuth := pkg.Provider{
-		ID:                 provider.ID,
-		SystemName:         provider.SystemName,
-		Address:            provider.Address,
-		Port:               provider.Port,
-		AuthenticationInfo: provider.AuthenticationInfo,
-		Metadata:           provider.Metadata,
-		CreatedAt:          provider.CreatedAt,
-		UpdatedAt:          provider.UpdatedAt,
+	createdAuthorizations := make([]pkg.Authorization, 0)
+
+	for _, providerID := range req.ProviderIDs {
+		provider, err := r.db.GetSystemByID(providerID)
+		if err != nil || provider == nil {
+			r.logger.WithError(err).WithField("provider_id", providerID).Warn("Provider system not found, skipping rule creation")
+			continue
+		}
+
+		for _, serviceDefID := range req.ServiceDefinitionIDs {
+			serviceDef, err := r.db.GetServiceDefinitionByID(serviceDefID)
+			if err != nil || serviceDef == nil {
+				r.logger.WithError(err).WithField("service_def_id", serviceDefID).Warn("Service definition not found, skipping rule creation")
+				continue
+			}
+
+			providerForAuth := pkg.Provider{ID: provider.ID, SystemName: provider.SystemName, Address: provider.Address, Port: provider.Port, AuthenticationInfo: provider.AuthenticationInfo, Metadata: provider.Metadata, CreatedAt: provider.CreatedAt, UpdatedAt: provider.UpdatedAt}
+
+			now := time.Now()
+			authorization := &pkg.Authorization{ConsumerSystem: *consumer, ProviderSystem: providerForAuth, ServiceDefinition: *serviceDef, Interfaces: interfaces, CreatedAt: &now, UpdatedAt: &now}
+
+			if err := r.db.CreateAuthorization(authorization); err != nil {
+				r.logger.WithError(err).Error("Failed to create authorization rule")
+				continue
+			}
+
+			r.logger.WithField("auth_id", authorization.ID).Info("Authorization rule created successfully")
+			createdAuthorizations = append(createdAuthorizations, *authorization)
+		}
 	}
 
-	// Create authorization
-	now := time.Now()
-	authorization := &pkg.Authorization{
-		ConsumerSystem:    *consumer,
-		ProviderSystem:    providerForAuth,
-		ServiceDefinition: *serviceDef,
-		Interfaces:        interfaces,
-		CreatedAt:         &now,
-		UpdatedAt:         &now,
-	}
-
-	if err := r.db.CreateAuthorization(authorization); err != nil {
-		r.logger.WithError(err).Error("Failed to create authorization")
-		return nil, pkg.DatabaseError(err)
-	}
-
-	r.logger.WithField("auth_id", authorization.ID).Info("Authorization created successfully")
-	return authorization, nil
+	return createdAuthorizations, nil
 }
 
 // RemoveAuthorization removes an authorization rule by ID

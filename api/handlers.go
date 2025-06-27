@@ -481,7 +481,7 @@ func (h *Handlers) AddAuthorization(c *gin.Context) {
 		return
 	}
 
-	authorization, err := h.registry.AddAuthorization(&req)
+	authorizations, err := h.registry.AddAuthorization(&req)
 	if err != nil {
 		if appErr, ok := err.(*pkg.AppError); ok {
 			h.respondWithError(c, appErr)
@@ -492,10 +492,9 @@ func (h *Handlers) AddAuthorization(c *gin.Context) {
 		return
 	}
 
-	// Return as AuthorizationsResponse with single item
 	response := pkg.AuthorizationsResponse{
-		Data:  []pkg.Authorization{*authorization},
-		Count: 1,
+		Data:  authorizations,
+		Count: len(authorizations),
 	}
 
 	c.JSON(http.StatusCreated, response)
