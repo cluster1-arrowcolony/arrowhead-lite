@@ -290,7 +290,9 @@ func (o *Orchestrator) applyPreferredProviders(services []pkg.Service, preferred
 
 // applyQoSFiltering applies QoS requirements filtering
 func (o *Orchestrator) applyQoSFiltering(services []pkg.Service, qosReqs map[string]string) []pkg.Service {
-	// For now, return all services
+	if len(qosReqs) > 0 {
+		o.logger.Debug("QoS filtering is not implemented in arrowhead-lite, returning all services.")
+	}
 	// TODO: Implement QoS filtering based on requirements
 	return services
 }
@@ -338,7 +340,10 @@ func (o *Orchestrator) createMatchedService(service pkg.Service, req *pkg.Orches
 	// Check if ping is required
 	warnings := make([]string, 0)
 	if req.RequestedService.PingProviders || req.OrchestrationFlags.PingProviders {
-		// TODO: Implement provider pinging
+		o.logger.WithFields(logrus.Fields{
+			"provider": service.Provider.SystemName,
+			"service":  service.ServiceDefinition.ServiceDefinition,
+		}).Debug("Provider ping requested but is not implemented in arrowhead-lite.")
 		warnings = append(warnings, "Provider ping not implemented")
 	}
 
