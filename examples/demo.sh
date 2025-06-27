@@ -1,5 +1,14 @@
 #!/bin/bash
 
+set -e
+
+# --- Check for prerequisites ---
+if ! command -v jq &> /dev/null; then
+    echo "Error: jq command not found. Please install jq to run this demo."
+    echo "e.g., 'sudo apt-get install jq' or 'brew install jq'"
+    exit 1
+fi
+
 # Change to the project root directory to ensure paths are correct
 cd "$(dirname "$0")/.."
 
@@ -63,7 +72,7 @@ register_system() {
     local body=$(echo "$response" | sed 's/HTTPSTATUS:[0-9]*$//')
     
     if [ "$status_code" = "201" ]; then
-        local system_id=$(echo "$body" | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])")
+        local system_id=$(echo "$body" | jq -r '.id')
         echo "   ✅ Registered: $system_name (ID: $system_id)" >&2
         echo "$system_id"
     else
@@ -84,9 +93,9 @@ register_service() {
     local provider_response=$(make_curl_request "GET" "${SERVER_URL}/serviceregistry/mgmt/systems/${provider_system_id}")
     local provider_body=$(echo "$provider_response" | sed 's/HTTPSTATUS:[0-9]*$//')
     
-    local provider_name=$(echo "$provider_body" | python3 -c "import sys, json; print(json.load(sys.stdin)['systemName'])")
-    local provider_address=$(echo "$provider_body" | python3 -c "import sys, json; print(json.load(sys.stdin)['address'])")
-    local provider_port=$(echo "$provider_body" | python3 -c "import sys, json; print(json.load(sys.stdin)['port'])")
+    local provider_name=$(echo "$provider_body" | jq -r '.systemName')
+    local provider_address=$(echo "$provider_body" | jq -r '.address')
+    local provider_port=$(echo "$provider_body" | jq -r '.port')
     
     local payload="{
         \"serviceDefinition\": \"$service_definition\",
@@ -105,7 +114,7 @@ register_service() {
     local body=$(echo "$response" | sed 's/HTTPSTATUS:[0-9]*$//')
     
     if [ "$status_code" = "201" ]; then
-        local service_id=$(echo "$body" | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])")
+        local service_id=$(echo "$body" | jq -r '.id')
         echo "   ✅ Registered service: $service_definition (ID: $service_id)" >&2
         echo "$service_id"
     else
@@ -125,7 +134,7 @@ create_auth_rule() {
     
     # Get the Service Definition ID from the service object
     local service_obj_response=$(make_curl_request "GET" "${SERVER_URL}/serviceregistry/mgmt/services/${service_id}")
-    local service_def_id=$(echo "$service_obj_response" | sed 's/HTTPSTATUS:[0-9]*$//' | python3 -c "import sys, json; print(json.load(sys.stdin)['serviceDefinition']['id'])" 2>/dev/null)
+    local service_def_id=$(echo "$service_obj_response" | sed 's/HTTPSTATUS:[0-9]*$//' | jq -r '.serviceDefinition.id' 2>/dev/null)
     
     if [ -z "$service_def_id" ]; then echo "   ❌ Failed to get Service Definition ID for service $service_id" >&2; return 1; fi
     
