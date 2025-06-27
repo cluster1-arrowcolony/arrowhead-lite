@@ -4,6 +4,7 @@
 VERSION ?= 1.0.0
 BUILD_TIME := $(shell date -u '+%Y-%m-%dT%H:%M:%S')
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
+export PATH := $(shell go env GOPATH)/bin:$(PATH)
 
 # Go build flags
 LDFLAGS = -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME) -X main.gitCommit=$(GIT_COMMIT)
