@@ -8,23 +8,19 @@ import (
 	"strings"
 	"time"
 
+	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/auth"
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/database"
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/pkg"
 	"github.com/sirupsen/logrus"
 )
 
-// AuthManager interface for token generation
-type AuthManager interface {
-	GenerateServiceToken(consumerID, providerID, serviceID int) (string, error)
-}
-
 type Orchestrator struct {
 	db          database.Database
-	authManager AuthManager
+	authManager *auth.AuthManager
 	logger      *logrus.Logger
 }
 
-func NewOrchestrator(db database.Database, authManager AuthManager, logger *logrus.Logger) *Orchestrator {
+func NewOrchestrator(db database.Database, authManager *auth.AuthManager, logger *logrus.Logger) *Orchestrator {
 	return &Orchestrator{
 		db:          db,
 		authManager: authManager,
@@ -32,7 +28,7 @@ func NewOrchestrator(db database.Database, authManager AuthManager, logger *logr
 	}
 }
 
-// Orchestrate performs service orchestration for Arrowhead 4.x OrchestrationRequest
+// Handle an orchestration request
 func (o *Orchestrator) Orchestrate(req *pkg.OrchestrationRequest) (*pkg.OrchestrationResponse, error) {
 	o.logger.WithFields(logrus.Fields{
 		"requester_system": req.RequesterSystem.SystemName,
@@ -41,30 +37,20 @@ func (o *Orchestrator) Orchestrate(req *pkg.OrchestrationRequest) (*pkg.Orchestr
 		"flags":            req.OrchestrationFlags,
 	}).Debug("Processing orchestration request")
 
-	// Find services matching the request
 	matchingServices, err := o.findMatchingServices(req)
 	if err != nil {
 		o.logger.WithError(err).Error("Failed to find matching services")
 		return nil, pkg.InternalServerError("Failed to find matching services")
 	}
 
-	// Apply orchestration flags and filtering
 	filteredServices := o.applyOrchestrationFlags(matchingServices, req)
-
-	// Apply preferred providers if specified
 	rankedServices := o.applyPreferredProviders(filteredServices, req.PreferredProviders)
-
-	// Apply QoS requirements if specified
 	if len(req.QoSRequirements) > 0 {
 		rankedServices = o.applyQoSFiltering(rankedServices, req.QoSRequirements)
 	}
-
-	// Apply metadata search if enabled
 	if req.OrchestrationFlags.MetadataSearch {
 		rankedServices = o.applyMetadataFiltering(rankedServices, req.RequestedService.MetadataRequirements)
 	}
-
-	// Convert to MatchedService format and generate authorization tokens
 	matchedServices := make([]pkg.MatchedService, 0, len(rankedServices))
 	for _, service := range rankedServices {
 		matchedService, err := o.createMatchedService(service, req)
@@ -85,17 +71,15 @@ func (o *Orchestrator) Orchestrate(req *pkg.OrchestrationRequest) (*pkg.Orchestr
 	return &pkg.OrchestrationResponse{Response: matchedServices}, nil
 }
 
-// findMatchingServices finds services that match the orchestration request
 func (o *Orchestrator) findMatchingServices(req *pkg.OrchestrationRequest) ([]pkg.Service, error) {
-	// Get all services from the database (in a real implementation, this would be optimized)
-	allServices, err := o.db.ListServices("id", "ASC")
+	services, err := o.db.ListServices("id", "ASC")
 	if err != nil {
 		return nil, err
 	}
 
 	matchingServices := make([]pkg.Service, 0)
 
-	for _, service := range allServices {
+	for _, service := range services {
 		// Check service definition match
 		if !o.matchesServiceDefinition(service, req.RequestedService.ServiceDefinitionRequirement) {
 			continue
@@ -127,12 +111,12 @@ func (o *Orchestrator) findMatchingServices(req *pkg.OrchestrationRequest) ([]pk
 	return matchingServices, nil
 }
 
-// matchesServiceDefinition checks if the service matches the requested service definition
+// Checks if the service matches the requested service definition
 func (o *Orchestrator) matchesServiceDefinition(service pkg.Service, required string) bool {
 	return strings.EqualFold(service.ServiceDefinition.ServiceDefinition, required)
 }
 
-// matchesInterfaceRequirements checks if the service provides required interfaces
+// Checks if the service provides required interfaces
 func (o *Orchestrator) matchesInterfaceRequirements(service pkg.Service, required []string) bool {
 	if len(required) == 0 {
 		return true // No specific interface requirements
@@ -152,7 +136,7 @@ func (o *Orchestrator) matchesInterfaceRequirements(service pkg.Service, require
 	return true
 }
 
-// matchesSecurityRequirements checks if the service meets security requirements
+// Checks if the service meets security requirements
 func (o *Orchestrator) matchesSecurityRequirements(service pkg.Service, required []string) bool {
 	if len(required) == 0 {
 		return true // No specific security requirements
@@ -177,7 +161,7 @@ func (o *Orchestrator) matchesSecurityRequirements(service pkg.Service, required
 	return true
 }
 
-// matchesVersionRequirements checks if the service version meets requirements
+// Checks if the service version meets requirements
 func (o *Orchestrator) matchesVersionRequirements(service pkg.Service, requested pkg.RequestedService) bool {
 	serviceVersion := service.Version
 
@@ -202,7 +186,7 @@ func (o *Orchestrator) matchesVersionRequirements(service pkg.Service, requested
 	return true
 }
 
-// isAuthorized checks if the requester is authorized to access the service
+// Checks if the requester is authorized to access the service
 func (o *Orchestrator) isAuthorized(requester pkg.RequesterSystem, service pkg.Service) bool {
 	// Get requester system from database to get its ID
 	requesterSystem, err := o.db.GetSystemByName(requester.SystemName)
@@ -244,7 +228,7 @@ func (o *Orchestrator) isAuthorized(requester pkg.RequesterSystem, service pkg.S
 	return authorized
 }
 
-// applyOrchestrationFlags applies orchestration flags to filter services
+// Applies orchestration flags to filter services
 func (o *Orchestrator) applyOrchestrationFlags(services []pkg.Service, req *pkg.OrchestrationRequest) []pkg.Service {
 	// Apply various orchestration flags
 	// For now, we'll implement basic functionality
@@ -266,7 +250,7 @@ func (o *Orchestrator) applyOrchestrationFlags(services []pkg.Service, req *pkg.
 	return services
 }
 
-// applyPreferredProviders ranks services based on preferred providers
+// Ranks services based on preferred providers
 func (o *Orchestrator) applyPreferredProviders(services []pkg.Service, preferred []pkg.PreferredProvider) []pkg.Service {
 	if len(preferred) == 0 {
 		return services
@@ -288,16 +272,16 @@ func (o *Orchestrator) applyPreferredProviders(services []pkg.Service, preferred
 	return services
 }
 
-// applyQoSFiltering applies QoS requirements filtering
+// Apply QoS requirements filtering
 func (o *Orchestrator) applyQoSFiltering(services []pkg.Service, qosReqs map[string]string) []pkg.Service {
+	// TODO: Not yet implemented
 	if len(qosReqs) > 0 {
 		o.logger.Debug("QoS filtering is not implemented in arrowhead-lite, returning all services.")
 	}
-	// TODO: Implement QoS filtering based on requirements
 	return services
 }
 
-// applyMetadataFiltering applies metadata-based filtering
+// Apply metadata-based filtering
 func (o *Orchestrator) applyMetadataFiltering(services []pkg.Service, metadataReqs map[string]string) []pkg.Service {
 	if len(metadataReqs) == 0 {
 		return services
@@ -324,7 +308,7 @@ func (o *Orchestrator) applyMetadataFiltering(services []pkg.Service, metadataRe
 	return filteredServices
 }
 
-// createMatchedService creates a MatchedService from a Service
+// Create a MatchedService from a Service
 func (o *Orchestrator) createMatchedService(service pkg.Service, req *pkg.OrchestrationRequest) (*pkg.MatchedService, error) {
 	// Generate authorization token
 	authTokens := make(map[string]string)
@@ -340,6 +324,7 @@ func (o *Orchestrator) createMatchedService(service pkg.Service, req *pkg.Orches
 	// Check if ping is required
 	warnings := make([]string, 0)
 	if req.RequestedService.PingProviders || req.OrchestrationFlags.PingProviders {
+		// TODO: Implement provider ping logic
 		o.logger.WithFields(logrus.Fields{
 			"provider": service.Provider.SystemName,
 			"service":  service.ServiceDefinition.ServiceDefinition,
@@ -362,7 +347,7 @@ func (o *Orchestrator) createMatchedService(service pkg.Service, req *pkg.Orches
 	return matchedService, nil
 }
 
-// generateAuthorizationToken generates an authorization token for service access
+// Generate an authorization token for service access
 func (o *Orchestrator) generateAuthorizationToken(requester pkg.RequesterSystem, service pkg.Service, interfaceName string) (string, error) {
 	// Get requester system from database to get its ID
 	requesterSystem, err := o.db.GetSystemByName(requester.SystemName)
@@ -372,18 +357,11 @@ func (o *Orchestrator) generateAuthorizationToken(requester pkg.RequesterSystem,
 	}
 
 	// Generate proper JWT token using AuthManager
-	if o.authManager != nil {
-		token, err := o.authManager.GenerateServiceToken(
-			requesterSystem.ID,
-			service.Provider.ID,
-			service.ID,
-		)
-		if err != nil {
-			o.logger.WithError(err).Warn("Failed to generate JWT token, falling back to simple token")
-		} else {
-			return token, nil
-		}
+	token, err := o.authManager.GenerateServiceToken(requesterSystem.ID, service.Provider.ID, service.ID)
+	if err == nil {
+		return token, nil
 	}
+	o.logger.WithError(err).Warn("Failed to generate JWT token, falling back to simple token")
 
 	// Fallback to simple token generation if AuthManager is not available or fails
 	tokenData := fmt.Sprintf("%s:%s:%s:%d",
@@ -397,6 +375,5 @@ func (o *Orchestrator) generateAuthorizationToken(requester pkg.RequesterSystem,
 		return "", err
 	}
 
-	token := hex.EncodeToString(randomBytes) + ":" + tokenData
-	return token, nil
+	return hex.EncodeToString(randomBytes) + ":" + tokenData, nil
 }

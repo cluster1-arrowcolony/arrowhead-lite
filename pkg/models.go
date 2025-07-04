@@ -4,9 +4,7 @@ import (
 	"time"
 )
 
-// Arrowhead 4.x System Models
-
-// SystemRegistration represents a system registration request
+// A system registration request
 type SystemRegistration struct {
 	SystemName         string            `json:"systemName"`
 	Address            string            `json:"address"`
@@ -15,7 +13,7 @@ type SystemRegistration struct {
 	Metadata           map[string]string `json:"metadata,omitempty"`
 }
 
-// System represents an Arrowhead system
+// An Arrowhead system
 type System struct {
 	ID                 int               `json:"id"`
 	SystemName         string            `json:"systemName"`
@@ -27,15 +25,13 @@ type System struct {
 	Metadata           map[string]string `json:"metadata,omitempty"`
 }
 
-// SystemsResponse represents a paginated response of systems
+// A paginated response of systems
 type SystemsResponse struct {
 	Data  []System `json:"data"`
 	Count int      `json:"count"`
 }
 
-// Arrowhead 4.x Service Models
-
-// ServiceDefinition represents a service definition
+// A service definition
 type ServiceDefinition struct {
 	ID                int        `json:"id"`
 	ServiceDefinition string     `json:"serviceDefinition"`
@@ -43,7 +39,7 @@ type ServiceDefinition struct {
 	UpdatedAt         *time.Time `json:"updatedAt,omitempty"`
 }
 
-// Interface represents a service interface
+// A service interface
 type Interface struct {
 	ID            int        `json:"id"`
 	InterfaceName string     `json:"interfaceName"`
@@ -51,7 +47,8 @@ type Interface struct {
 	UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
 }
 
-// Provider represents a service provider system
+// A service provider system
+// TODO: How does this differ from ProviderSystem?
 type Provider struct {
 	ID                 int               `json:"id"`
 	SystemName         string            `json:"systemName"`
@@ -63,7 +60,7 @@ type Provider struct {
 	UpdatedAt          *time.Time        `json:"updatedAt,omitempty"`
 }
 
-// ProviderSystem represents a provider system for service registration
+// A provider system for service registration
 type ProviderSystem struct {
 	SystemName         string            `json:"systemName"`
 	Address            string            `json:"address"`
@@ -72,7 +69,7 @@ type ProviderSystem struct {
 	Metadata           map[string]string `json:"metadata,omitempty"`
 }
 
-// ServiceRegistrationRequest represents a service registration request
+// A service registration request
 type ServiceRegistrationRequest struct {
 	ServiceDefinition string            `json:"serviceDefinition"`
 	ProviderSystem    ProviderSystem    `json:"providerSystem"`
@@ -84,7 +81,7 @@ type ServiceRegistrationRequest struct {
 	Interfaces        []string          `json:"interfaces"`
 }
 
-// Service represents a registered service
+// A registered service
 type Service struct {
 	ID                int               `json:"id"`
 	ServiceDefinition ServiceDefinition `json:"serviceDefinition"`
@@ -99,15 +96,13 @@ type Service struct {
 	UpdatedAt         *time.Time        `json:"updatedAt,omitempty"`
 }
 
-// ServicesResponse represents a paginated response of services
+// A paginated response of services
 type ServicesResponse struct {
 	Data  []Service `json:"data"`
 	Count int       `json:"count"`
 }
 
-// Arrowhead 4.x Authorization Models
-
-// AddAuthorizationRequest represents an authorization rule creation request
+// An authorization rule creation request
 type AddAuthorizationRequest struct {
 	ConsumerID           int   `json:"consumerId"`
 	ProviderIDs          []int `json:"providerIds"`
@@ -115,7 +110,7 @@ type AddAuthorizationRequest struct {
 	ServiceDefinitionIDs []int `json:"serviceDefinitionIds"`
 }
 
-// Authorization represents an authorization rule
+// An authorization rule
 type Authorization struct {
 	ID                int               `json:"id"`
 	ConsumerSystem    System            `json:"consumerSystem"`
@@ -126,15 +121,13 @@ type Authorization struct {
 	UpdatedAt         *time.Time        `json:"updatedAt,omitempty"`
 }
 
-// AuthorizationsResponse represents a paginated response of authorizations
+// A paginated response of authorizations
 type AuthorizationsResponse struct {
 	Data  []Authorization `json:"data"`
 	Count int             `json:"count"`
 }
 
-// Arrowhead 4.x Orchestration Models
-
-// RequesterSystem represents the system requesting orchestration
+// A system requesting orchestration
 type RequesterSystem struct {
 	SystemName         string            `json:"systemName"`
 	Address            string            `json:"address"`
@@ -143,7 +136,7 @@ type RequesterSystem struct {
 	Metadata           map[string]string `json:"metadata,omitempty"`
 }
 
-// OrchestrationFlags represents orchestration behavior flags
+// Orchestration behavior flags
 type OrchestrationFlags struct {
 	OnlyPreferred          bool `json:"onlyPreferred"`
 	OverrideStore          bool `json:"overrideStore"`
@@ -156,7 +149,7 @@ type OrchestrationFlags struct {
 	PingProviders          bool `json:"pingProviders"`
 }
 
-// Cloud represents an Arrowhead cloud
+// An Arrowhead cloud
 type Cloud struct {
 	AuthenticationInfo string `json:"authenticationInfo"`
 	GatekeeperRelayIDs []int  `json:"gatekeeperRelayIds"`
@@ -167,13 +160,13 @@ type Cloud struct {
 	Secure             bool   `json:"secure"`
 }
 
-// PreferredProvider represents a preferred provider for orchestration
+// A preferred provider for orchestration
 type PreferredProvider struct {
 	ProviderCloud  Cloud  `json:"providerCloud"`
 	ProviderSystem System `json:"providerSystem"`
 }
 
-// RequestedService represents the service being requested in orchestration
+// A service being requested in orchestration
 type RequestedService struct {
 	ServiceDefinitionRequirement string            `json:"serviceDefinitionRequirement"`
 	InterfaceRequirements        []string          `json:"interfaceRequirements"`
@@ -185,7 +178,7 @@ type RequestedService struct {
 	PingProviders                bool              `json:"pingProviders"`
 }
 
-// OrchestrationRequest represents a request for service orchestration
+// A request for service orchestration
 type OrchestrationRequest struct {
 	RequesterSystem    RequesterSystem     `json:"requesterSystem"`
 	RequestedService   RequestedService    `json:"requestedService"`
@@ -196,7 +189,7 @@ type OrchestrationRequest struct {
 	Commands           map[string]string   `json:"commands,omitempty"`
 }
 
-// MatchedService represents a service matched during orchestration
+// A service matched during orchestration
 type MatchedService struct {
 	Provider            Provider          `json:"provider"`
 	Service             ServiceDefinition `json:"service"` // Note: field name is "service" not "serviceDefinition"
@@ -209,14 +202,12 @@ type MatchedService struct {
 	Warnings            []string          `json:"warnings,omitempty"`
 }
 
-// OrchestrationResponse represents the response from orchestration
+// A response from orchestration
 type OrchestrationResponse struct {
 	Response []MatchedService `json:"response"`
 }
 
-// Utility models and errors
-
-// HealthStatus represents system health information
+// System health information
 type HealthStatus struct {
 	Service   string            `json:"service"`
 	Status    string            `json:"status"`
@@ -224,7 +215,7 @@ type HealthStatus struct {
 	Details   map[string]string `json:"details,omitempty"`
 }
 
-// Metrics represents system statistics
+// System statistics
 type Metrics struct {
 	TotalSystems   int64 `json:"total_systems"`
 	TotalServices  int64 `json:"total_services"`

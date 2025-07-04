@@ -13,10 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	handlers "git.ri.se/eu-cop-pilot/arrowhead-lite/api"
+	"git.ri.se/eu-cop-pilot/arrowhead-lite/api"
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal"
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/auth"
-	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/ca"
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/database"
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/orchestration"
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/registry"
@@ -27,144 +26,25 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type CoreSystems struct {
+	registry     *registry.Registry
+	authManager  *auth.AuthManager
+	orchestrator *orchestration.Orchestrator
+}
+
 func main() {
-	var quiet = flag.Bool("quiet", false, "Disable all logging output")
-	var verbose = flag.Bool("verbose", false, "Enable verbose logging")
-	var disableTLS = flag.Bool("disable-tls", false, "Disable TLS even if enabled in configuration")
-	flag.Parse()
-
-	configPath := os.Getenv("ARROWHEAD_CONFIG")
-
-	cfg, err := internal.LoadConfig(configPath)
-	if err != nil {
-		logrus.WithError(err).Fatal("Failed to load configuration")
-	}
-
-	// Override logging level based on flags
-	if *quiet {
-		cfg.Logging.Level = "panic" // Only show panic messages
-	} else if *verbose {
-		cfg.Logging.Level = "debug"
-	}
-
-	// Override TLS configuration based on flags
-	if *disableTLS {
-		cfg.Server.TLS.Enabled = false
-	}
-
-	logger := setupLogger(cfg.Logging)
-	if !*quiet {
-		logger.Info("Starting Arrowhead IoT Service Mesh")
-	}
-
-	var connectionString string
-
-	if cfg.Database.Type == "postgres" || cfg.Database.Type == "postgresql" {
-		connectionString = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-			cfg.Database.Host, cfg.Database.Port, cfg.Database.Username, cfg.Database.Password, cfg.Database.Name)
-	} else {
-		// For SQLite, use the path field or default path
-		connectionString = cfg.Database.Path
-		if connectionString == "" {
-			connectionString = "./arrowhead.db"
-		}
-	}
-
-	db, err := database.NewStorage(cfg.Database.Type, connectionString)
-	if err != nil {
-		logger.WithError(err).Fatal("Failed to initialize database")
-	}
+	cfg, logger := readConfig()
+	logger.Info("Starting Arrowhead IoT Service Mesh")
+	db := createDatabase(cfg.Database, logger)
 	defer db.Close()
-
-	registryService := registry.NewRegistry(db, logger)
-
-	authManager := auth.NewAuthManager(db, logger, []byte(cfg.Auth.JWTSecret))
-	if err := setupAuthKeys(authManager, cfg.Auth); err != nil {
-		logger.WithError(err).Warn("Failed to setup auth keys, using JWT secrets only")
-	}
-
-	orchestratorService := orchestration.NewOrchestrator(db, authManager, logger)
-
-	// Create Certificate Authority
-	certificateAuthority, err := ca.NewCertificateAuthority("", "", "arrowhead123", logger)
-	if err != nil {
-		logger.WithError(err).Warn("Failed to initialize certificate authority")
-	}
-
-	router := setupRouter(cfg, registryService, authManager, orchestratorService, certificateAuthority, logger)
-
-	server := &http.Server{
-		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
-		Handler:      router,
-		ReadTimeout:  cfg.Server.ReadTimeout,
-		WriteTimeout: cfg.Server.WriteTimeout,
-	}
-
-	if cfg.Server.TLS.Enabled {
-		// Load CA certificates for mTLS verification
-		caCertPool, err := loadTrustStore(cfg.Server.TLS.TruststoreFile)
-		if err != nil {
-			logger.WithError(err).Fatal("Failed to load truststore, mTLS cannot be enforced.")
-		}
-
-		// The server's certificate doesn't need to be loaded separately here if we use ListenAndServeTLS,
-		// but the tls.Config is the right place for all other settings.
-
-		tlsConfig := &tls.Config{
-			// Certificates will be loaded by ListenAndServeTLS from the config file paths.
-			MinVersion: tls.VersionTLS12,
-			ClientAuth: tls.RequireAndVerifyClientCert,
-			ClientCAs:  caCertPool,
-		}
-		server.TLSConfig = tlsConfig
-
-		logger.WithFields(logrus.Fields{
-			"host":      cfg.Server.Host,
-			"port":      cfg.Server.Port,
-			"tls":       true,
-			"cert_file": cfg.Server.TLS.CertFile,
-			"key_file":  cfg.Server.TLS.KeyFile,
-		}).Info("Starting HTTPS server")
-
-		go func() {
-			// ListenAndServeTLS will use the server.TLSConfig and load the certs from the files.
-			if err := server.ListenAndServeTLS(cfg.Server.TLS.CertFile, cfg.Server.TLS.KeyFile); err != nil && err != http.ErrServerClosed {
-				logger.WithError(err).Fatal("Failed to start HTTPS server")
-			}
-		}()
-	} else {
-		logger.WithFields(logrus.Fields{
-			"host": cfg.Server.Host,
-			"port": cfg.Server.Port,
-			"tls":  false,
-		}).Info("Starting HTTP server")
-
-		go func() {
-			if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				logger.WithError(err).Fatal("Failed to start HTTP server")
-			}
-		}()
-	}
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	logger.Info("Shutting down server...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	if err := server.Shutdown(ctx); err != nil {
-		logger.WithError(err).Fatal("Server forced to shutdown")
-	}
-
+	coreSystems := createCoreSystems(db, cfg, logger)
+	httpServer := createHTTPServer(cfg, coreSystems, logger)
+	runAndShutdownServer(httpServer, cfg, logger)
 	logger.Info("Server exited")
 }
 
-func setupLogger(cfg internal.LoggingConfig) *logrus.Logger {
+func createLogger(cfg internal.LoggingConfig) *logrus.Logger {
 	logger := logrus.New()
-
 	level, err := logrus.ParseLevel(cfg.Level)
 	if err != nil {
 		level = logrus.InfoLevel
@@ -187,11 +67,81 @@ func setupLogger(cfg internal.LoggingConfig) *logrus.Logger {
 			logger.SetOutput(file)
 		}
 	}
-
 	return logger
 }
 
-// Sets up the public and private authentication keys for the AuthManager.
+func readConfig() (*internal.Config, *logrus.Logger) {
+	var quiet = flag.Bool("quiet", false, "Disable all logging output")
+	var verbose = flag.Bool("verbose", false, "Enable verbose logging")
+	var clean = flag.Bool("clean", false, "Run with a clean database")
+	flag.Parse()
+
+	configPath := os.Getenv("ARROWHEAD_CONFIG")
+	cfg, err := internal.LoadConfig(configPath)
+
+	logger := createLogger(cfg.Logging)
+
+	if *clean {
+		dbPath := "./arrowhead.db"
+		if _, err := os.Stat(dbPath); err == nil {
+			if err := os.Remove(dbPath); err != nil {
+				logger.WithError(err).Fatalf("Failed to remove database file: %s", dbPath)
+			}
+			logger.Printf("Removed database file: %s\n", dbPath)
+		} else {
+			logger.Println("Database file not found, nothing to clean.")
+		}
+	}
+
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to load configuration")
+	}
+
+	if *quiet {
+		cfg.Logging.Level = "panic"
+	} else if *verbose {
+		cfg.Logging.Level = "debug"
+	}
+
+	return cfg, logger
+}
+
+func createDatabase(cfg internal.DatabaseConfig, logger *logrus.Logger) database.Database {
+	var db database.Database
+	var err error
+	switch cfg.Type {
+	case "postgresql":
+		var conn = fmt.Sprintf(
+			"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+			cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.Name)
+		db, err = database.NewPostgreSQLDB(conn)
+	case "sqlite":
+		var conn = cfg.Path
+		if conn == "" {
+			conn = "./arrowhead.db"
+		}
+		db, err = database.NewSQLiteDB(conn)
+	default:
+		err = fmt.Errorf("unsupported database type: %s (supported: postgresql, sqlite)", cfg.Type)
+	}
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to initialize database")
+	}
+	return db
+}
+
+func createCoreSystems(db database.Database, cfg *internal.Config, logger *logrus.Logger) *CoreSystems {
+	authMgr := auth.NewAuthManager(db, logger, []byte(cfg.Auth.JWTSecret))
+	if err := setupAuthKeys(authMgr, cfg.Auth); err != nil {
+		logger.WithError(err).Warn("Failed to setup auth keys, using JWT secrets only")
+	}
+	return &CoreSystems{
+		registry:     registry.NewRegistry(db, logger),
+		authManager:  authMgr,
+		orchestrator: orchestration.NewOrchestrator(db, authMgr, logger),
+	}
+}
+
 func setupAuthKeys(authManager *auth.AuthManager, cfg internal.AuthConfig) error {
 	var privateKeyPEM, publicKeyPEM []byte
 	var err error
@@ -213,13 +163,48 @@ func setupAuthKeys(authManager *auth.AuthManager, cfg internal.AuthConfig) error
 	return authManager.SetKeys(privateKeyPEM, publicKeyPEM)
 }
 
-// Initializes the Gin router with all routes and middleware.
-func setupRouter(
+func createHTTPServer(cfg *internal.Config, coreSystems *CoreSystems, logger *logrus.Logger) *http.Server {
+	return &http.Server{
+		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
+		Handler:      createGinRouter(cfg, coreSystems, logger),
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+		TLSConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			ClientAuth: tls.RequireAndVerifyClientCert,
+			ClientCAs:  loadTrustStore(cfg.Server.TLS.TruststoreFile, logger),
+		},
+	}
+}
+
+func runAndShutdownServer(server *http.Server, cfg *internal.Config, logger *logrus.Logger) {
+	go func() {
+		logger.WithFields(logrus.Fields{
+			"address": server.Addr,
+			"tls":     true,
+		}).Info("Starting HTTPS server")
+		err := server.ListenAndServeTLS(cfg.Server.TLS.CertFile, cfg.Server.TLS.KeyFile)
+		if err != nil && err != http.ErrServerClosed {
+			logger.WithError(err).Fatal("Failed to start server")
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	logger.Info("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		logger.WithError(err).Fatal("Server forced to shutdown")
+	}
+}
+
+func createGinRouter(
 	cfg *internal.Config,
-	registryService *registry.Registry,
-	authManager *auth.AuthManager,
-	orchestratorService *orchestration.Orchestrator,
-	certificateAuthority *ca.CertificateAuthority,
+	coreSystems *CoreSystems,
 	logger *logrus.Logger,
 ) *gin.Engine {
 	if cfg.Logging.Level != "debug" {
@@ -238,102 +223,55 @@ func setupRouter(
 	}
 	router.Use(cors.New(corsConfig))
 
-	h := handlers.New(registryService, authManager, orchestratorService, certificateAuthority, logger)
+	h := handlers.NewHandlers(coreSystems.registry, coreSystems.authManager, coreSystems.orchestrator, logger)
 
 	router.GET("/health", h.HealthCheck)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// Arrowhead 4.x compatible endpoints (no /api/v1 prefix)
-	// Service Registry endpoints
 	serviceRegistry := router.Group("/serviceregistry")
 	{
-		// Management API endpoints
 		mgmt := serviceRegistry.Group("/mgmt")
 		{
-			// All system-related endpoints are under /systems
 			systems := mgmt.Group("/systems")
 			{
-				// Public read-only routes
 				systems.GET("", h.ListSystems)
 				systems.GET("/:id", h.GetSystemByID)
-
-				// Authenticated write routes
-				if cfg.Server.TLS.Enabled {
-					systems.POST("", h.AuthMiddleware(), h.RegisterSystem)
-					systems.DELETE("/:id", h.AuthMiddleware(), h.UnregisterSystemByID)
-				} else {
-					systems.POST("", h.RegisterSystem)
-					systems.DELETE("/:id", h.UnregisterSystemByID)
-				}
+				systems.POST("", h.AuthMiddleware(), h.RegisterSystem)
+				systems.POST("/batch", h.AuthMiddleware(), h.RegisterSystemsBatch)
+				systems.DELETE("/:id", h.AuthMiddleware(), h.UnregisterSystemByID)
 			}
-
-			// All service-related endpoints are under /services
 			services := mgmt.Group("/services")
 			{
-				// Public read-only routes
 				services.GET("", h.ListServices)
 				services.GET("/:id", h.GetServiceByID)
-
-				// Authenticated write routes
-				if cfg.Server.TLS.Enabled {
-					services.POST("", h.AuthMiddleware(), h.RegisterServiceMgmt)
-					services.DELETE("/:id", h.AuthMiddleware(), h.UnregisterServiceByID)
-				} else {
-					services.POST("", h.RegisterServiceMgmt)
-					services.DELETE("/:id", h.UnregisterServiceByID)
-				}
+				services.POST("", h.AuthMiddleware(), h.RegisterServiceMgmt)
+				services.POST("/batch", h.AuthMiddleware(), h.RegisterServicesBatch)
+				services.DELETE("/:id", h.AuthMiddleware(), h.UnregisterServiceByID)
 			}
 		}
-
-		// Public registration endpoints
 		serviceRegistry.POST("/register-system", h.RegisterSystemPublic)
 		serviceRegistry.DELETE("/unregister-system", h.UnregisterSystemPublic)
-
-		// Apply authentication middleware conditionally for service registration
-		if cfg.Server.TLS.Enabled {
-			serviceRegistry.POST("/register", h.AuthMiddleware(), h.RegisterService)
-			serviceRegistry.DELETE("/unregister", h.AuthMiddleware(), h.UnregisterService)
-		} else {
-			serviceRegistry.POST("/register", h.RegisterService)
-			serviceRegistry.DELETE("/unregister", h.UnregisterService)
-		}
+		serviceRegistry.POST("/register", h.AuthMiddleware(), h.RegisterService)
+		serviceRegistry.DELETE("/unregister", h.AuthMiddleware(), h.UnregisterService)
 	}
-
-	// Authorization endpoints
 	authorization := router.Group("/authorization")
 	{
 		authMgmt := authorization.Group("/mgmt")
 		{
-			// Apply authentication middleware conditionally based on TLS configuration
-			if cfg.Server.TLS.Enabled {
-				authMgmt.POST("/intracloud", h.AuthMiddleware(), h.AddAuthorization)
-				authMgmt.DELETE("/intracloud/:id", h.AuthMiddleware(), h.RemoveAuthorization)
-			} else {
-				authMgmt.POST("/intracloud", h.AddAuthorization)
-				authMgmt.DELETE("/intracloud/:id", h.RemoveAuthorization)
-			}
-
-			// Public, read-only routes
+			authMgmt.POST("/intracloud", h.AuthMiddleware(), h.AddAuthorization)
+			authMgmt.POST("/intracloud/batch", h.AuthMiddleware(), h.AddAuthorizationsBatch)
+			authMgmt.DELETE("/intracloud/:id", h.AuthMiddleware(), h.RemoveAuthorization)
 			authMgmt.GET("/intracloud", h.ListAuthorizations)
 		}
 	}
-
-	// Orchestrator endpoints
 	orchestrator := router.Group("/orchestrator")
 	{
-		// Apply authentication middleware conditionally based on TLS configuration
-		if cfg.Server.TLS.Enabled {
-			orchestrator.POST("/orchestration", h.AuthMiddleware(), h.Orchestrate)
-		} else {
-			orchestrator.POST("/orchestration", h.Orchestrate)
-		}
+		orchestrator.POST("/orchestration", h.AuthMiddleware(), h.Orchestrate)
 	}
-
 	router.Static("/static", "./web/static")
 	router.LoadHTMLGlob("web/templates/*")
-
 	router.GET("/", func(c *gin.Context) {
-		metrics, err := registryService.GetMetrics()
+		metrics, err := coreSystems.registry.GetMetrics()
 		if err != nil {
 			logger.WithError(err).Error("Failed to get metrics")
 			metrics = &pkg.Metrics{
@@ -343,31 +281,26 @@ func setupRouter(
 				ActiveServices: 0,
 			}
 		}
-
-		// Get systems for health calculation
-		systems, err := registryService.ListSystems()
-		var health map[string]interface{}
+		systems, err := coreSystems.registry.ListSystems()
+		var health map[string]any
 		if err != nil {
 			logger.WithError(err).Error("Failed to get systems for health")
-			health = map[string]interface{}{
+			health = map[string]any{
 				"status":            "unknown",
 				"health_percentage": 0,
 				"health_ratio":      0.0,
 			}
 		} else {
-			totalSystems := len(systems)
-			activeSystems := totalSystems // All registered systems are considered active in Arrowhead 4.x
-
 			var healthPercentage int
 			var healthRatio float64
 			var status string
-			if totalSystems == 0 {
+			if len(systems) == 0 {
 				healthPercentage = 100
 				healthRatio = 1.0
 				status = "healthy"
 			} else {
-				healthPercentage = (activeSystems * 100) / totalSystems
-				healthRatio = float64(activeSystems) / float64(totalSystems)
+				healthPercentage = (len(systems) * 100) / len(systems)
+				healthRatio = float64(len(systems)) / float64(len(systems))
 				if healthPercentage >= 80 {
 					status = "healthy"
 				} else if healthPercentage >= 50 {
@@ -377,7 +310,7 @@ func setupRouter(
 				}
 			}
 
-			health = map[string]interface{}{
+			health = map[string]any{
 				"status":            status,
 				"health_percentage": healthPercentage,
 				"health_ratio":      healthRatio,
@@ -398,27 +331,28 @@ func setupRouter(
 	return router
 }
 
-// loadTrustStore loads CA certificates from a PEM file for mTLS verification
-func loadTrustStore(truststoreFile string) (*x509.CertPool, error) {
+func loadTrustStore(truststoreFile string, logger *logrus.Logger) *x509.CertPool {
 	if truststoreFile == "" {
-		return nil, fmt.Errorf("truststore file not specified")
+		logger.Fatal("truststore file not specified")
+		return nil
 	}
 
-	// Basic path validation to prevent directory traversal
 	if strings.Contains(truststoreFile, "..") {
-		return nil, fmt.Errorf("invalid truststore file path")
+		logger.Error("invalid truststore file path")
+		return nil
 	}
 
-	// #nosec G304 - truststore file path is validated and this is a legitimate certificate loading operation
 	caCert, err := os.ReadFile(truststoreFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read truststore file: %w", err)
+		logger.WithError(err).Fatalf("failed to read truststore file: %s", truststoreFile)
+		return nil
 	}
 
 	caCertPool := x509.NewCertPool()
 	if !caCertPool.AppendCertsFromPEM(caCert) {
-		return nil, fmt.Errorf("failed to parse CA certificate from truststore")
+		logger.Error("failed to parse CA certificate from truststore")
+		return nil
 	}
 
-	return caCertPool, nil
+	return caCertPool
 }

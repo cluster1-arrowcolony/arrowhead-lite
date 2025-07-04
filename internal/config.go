@@ -85,7 +85,6 @@ func LoadConfig(configPath string) (*Config, error) {
 	viper.SetDefault("server.cors.allow_origins", []string{"*"})
 	viper.SetDefault("server.cors.allow_methods", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"})
 	viper.SetDefault("server.cors.allow_headers", []string{"*"})
-
 	viper.SetDefault("database.type", "sqlite")
 	viper.SetDefault("database.path", "./arrowhead.db")
 	viper.SetDefault("database.host", "localhost")
@@ -93,17 +92,13 @@ func LoadConfig(configPath string) (*Config, error) {
 	viper.SetDefault("database.username", "arrowhead")
 	viper.SetDefault("database.password", "arrowhead")
 	viper.SetDefault("database.name", "arrowhead")
-
 	viper.SetDefault("auth.jwt_secret", "arrowhead-lite-secret")
 	viper.SetDefault("auth.token_duration", "24h")
-
 	viper.SetDefault("logging.level", "warn")
 	viper.SetDefault("logging.format", "text")
-
 	viper.SetDefault("health.check_interval", "1m")
 	viper.SetDefault("health.inactive_timeout", "5m")
 	viper.SetDefault("health.cleanup_interval", "10m")
-
 	viper.AutomaticEnv()
 	viper.SetEnvPrefix("ARROWHEAD")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))

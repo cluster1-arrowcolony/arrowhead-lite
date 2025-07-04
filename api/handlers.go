@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/auth"
-	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/ca"
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/orchestration"
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/internal/registry"
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/pkg"
@@ -16,27 +15,24 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// HTTP handlers for the Arrowhead 4.x compatible API.
+// HTTP handlers
 type Handlers struct {
 	registry     *registry.Registry
 	auth         *auth.AuthManager
 	orchestrator *orchestration.Orchestrator
-	ca           *ca.CertificateAuthority
 	logger       *logrus.Logger
 }
 
-func New(
+func NewHandlers(
 	reg *registry.Registry,
 	authMgr *auth.AuthManager,
 	orch *orchestration.Orchestrator,
-	certificateAuthority *ca.CertificateAuthority,
 	logger *logrus.Logger,
 ) *Handlers {
 	return &Handlers{
 		registry:     reg,
 		auth:         authMgr,
 		orchestrator: orch,
-		ca:           certificateAuthority,
 		logger:       logger,
 	}
 }
@@ -44,12 +40,7 @@ func New(
 // Authenticate a request using mTLS client certificates.
 func (h *Handlers) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Check if TLS is enabled and client certificate is present
-		if c.Request.TLS == nil {
-			h.respondWithError(c, pkg.UnauthorizedError("TLS required for authentication"))
-			return
-		}
-
+		// Check if client certificate is present
 		if len(c.Request.TLS.PeerCertificates) == 0 {
 			h.respondWithError(c, pkg.UnauthorizedError("Client certificate required"))
 			return
@@ -112,7 +103,28 @@ func (h *Handlers) AuthMiddleware() gin.HandlerFunc {
 
 // System Management Endpoints
 
-// RegisterSystem handles POST /serviceregistry/mgmt/systems
+// Handle POST /serviceregistry/mgmt/systems/batch
+func (h *Handlers) RegisterSystemsBatch(c *gin.Context) {
+	var reqs []pkg.SystemRegistration
+	if err := c.ShouldBindJSON(&reqs); err != nil {
+		h.respondWithError(c, pkg.BadRequestError("Invalid batch system registration request"))
+		return
+	}
+
+	systems, err := h.registry.RegisterSystemsBatch(reqs)
+	if err != nil {
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
+		return
+	}
+
+	c.JSON(http.StatusCreated, systems)
+}
+
+// Handle POST /serviceregistry/mgmt/systems
 func (h *Handlers) RegisterSystem(c *gin.Context) {
 	var req pkg.SystemRegistration
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -135,7 +147,7 @@ func (h *Handlers) RegisterSystem(c *gin.Context) {
 	c.JSON(http.StatusCreated, system)
 }
 
-// RegisterSystemPublic handles POST /serviceregistry/register-system
+// Handle POST /serviceregistry/register-system
 func (h *Handlers) RegisterSystemPublic(c *gin.Context) {
 	var req pkg.SystemRegistration
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -162,60 +174,7 @@ func (h *Handlers) RegisterSystemPublic(c *gin.Context) {
 	c.JSON(http.StatusCreated, system)
 }
 
-// RegisterSystemWithCertificate handles POST /serviceregistry/mgmt/systems with certificate signing
-// This endpoint can be used by the SDK when it needs a new certificate for a system
-func (h *Handlers) RegisterSystemWithCertificate(c *gin.Context) {
-	var req pkg.SystemRegistration
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.respondWithError(c, pkg.BadRequestError("Invalid system registration request"))
-		return
-	}
-
-	h.logger.WithFields(logrus.Fields{
-		"system_name": req.SystemName,
-		"address":     req.Address,
-		"port":        req.Port,
-	}).Info("Registering system with certificate signing")
-
-	// Register the system first
-	system, err := h.registry.RegisterSystem(&req)
-	if err != nil {
-		if appErr, ok := err.(*pkg.AppError); ok {
-			h.respondWithError(c, appErr)
-		} else {
-			h.logger.WithError(err).Error("An unexpected error occurred in RegisterSystemWithCertificate")
-			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
-		}
-		return
-	}
-
-	// Sign a certificate for this system if CA is available
-	var certificateData []byte
-	if h.ca != nil {
-		certificateData, err = h.ca.SignSystemCertificate(req.SystemName, req.Address, req.Port)
-		if err != nil {
-			h.logger.WithError(err).Warn("Failed to sign certificate for system")
-			// Continue without certificate - just log the warning
-		} else {
-			h.logger.WithField("system_name", req.SystemName).Info("Certificate signed for system")
-		}
-	}
-
-	// Create response
-	response := map[string]interface{}{
-		"system": system,
-	}
-
-	// Add certificate to response if available
-	if certificateData != nil {
-		response["certificate"] = base64.StdEncoding.EncodeToString(certificateData)
-		response["certificate_format"] = "pkcs12"
-	}
-
-	c.JSON(http.StatusCreated, response)
-}
-
-// UnregisterSystemByID handles DELETE /serviceregistry/mgmt/systems/:id
+// Handle DELETE /serviceregistry/mgmt/systems/:id
 func (h *Handlers) UnregisterSystemByID(c *gin.Context) {
 	systemIDStr := c.Param("id")
 	systemID, err := strconv.Atoi(systemIDStr)
@@ -237,7 +196,7 @@ func (h *Handlers) UnregisterSystemByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "System unregistered successfully"})
 }
 
-// UnregisterSystemPublic handles DELETE /serviceregistry/unregister-system
+// Handle DELETE /serviceregistry/unregister-system
 func (h *Handlers) UnregisterSystemPublic(c *gin.Context) {
 	systemName := c.Query("system_name")
 	address := c.Query("address")
@@ -267,7 +226,7 @@ func (h *Handlers) UnregisterSystemPublic(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "System unregistered successfully"})
 }
 
-// GetSystemByID handles GET /serviceregistry/mgmt/systems/:id
+// Handle GET /serviceregistry/mgmt/systems/:id
 func (h *Handlers) GetSystemByID(c *gin.Context) {
 	systemIDStr := c.Param("id")
 	systemID, err := strconv.Atoi(systemIDStr)
@@ -290,7 +249,7 @@ func (h *Handlers) GetSystemByID(c *gin.Context) {
 	c.JSON(http.StatusOK, system)
 }
 
-// ListSystems handles GET /serviceregistry/mgmt/systems
+// Handle GET /serviceregistry/mgmt/systems
 func (h *Handlers) ListSystems(c *gin.Context) {
 	// Extract pagination and sorting parameters
 	sortField := c.DefaultQuery("sort_field", "id")
@@ -317,7 +276,8 @@ func (h *Handlers) ListSystems(c *gin.Context) {
 
 // Service Management Endpoints
 
-// RegisterServiceMgmt handles POST /serviceregistry/mgmt
+// Handle POST /serviceregistry/mgmt
+// TODO: What is the difference between this, RegisterSerivecesBatch and RegisterService?
 func (h *Handlers) RegisterServiceMgmt(c *gin.Context) {
 	var req pkg.ServiceRegistrationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -325,7 +285,7 @@ func (h *Handlers) RegisterServiceMgmt(c *gin.Context) {
 		return
 	}
 
-	service, err := h.registry.RegisterServiceMgmt(&req)
+	service, err := h.registry.RegisterService(&req)
 	if err != nil {
 		if appErr, ok := err.(*pkg.AppError); ok {
 			h.respondWithError(c, appErr)
@@ -339,7 +299,28 @@ func (h *Handlers) RegisterServiceMgmt(c *gin.Context) {
 	c.JSON(http.StatusCreated, service)
 }
 
-// RegisterService handles POST /serviceregistry/register
+// Handle POST /serviceregistry/mgmt/services/batch
+func (h *Handlers) RegisterServicesBatch(c *gin.Context) {
+	var reqs []pkg.ServiceRegistrationRequest
+	if err := c.ShouldBindJSON(&reqs); err != nil {
+		h.respondWithError(c, pkg.BadRequestError("Invalid batch service registration request"))
+		return
+	}
+
+	services, err := h.registry.RegisterServicesBatch(reqs)
+	if err != nil {
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
+		return
+	}
+
+	c.JSON(http.StatusCreated, services)
+}
+
+// Handle POST /serviceregistry/register
 func (h *Handlers) RegisterService(c *gin.Context) {
 	var req pkg.ServiceRegistrationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -369,7 +350,7 @@ func (h *Handlers) RegisterService(c *gin.Context) {
 	c.JSON(http.StatusCreated, service)
 }
 
-// UnregisterServiceByID handles DELETE /serviceregistry/mgmt/:id
+// Handle DELETE /serviceregistry/mgmt/:id
 func (h *Handlers) UnregisterServiceByID(c *gin.Context) {
 	serviceIDStr := c.Param("id")
 	serviceID, err := strconv.Atoi(serviceIDStr)
@@ -391,7 +372,7 @@ func (h *Handlers) UnregisterServiceByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Service unregistered successfully"})
 }
 
-// UnregisterService handles DELETE /serviceregistry/unregister
+// Handle DELETE /serviceregistry/unregister
 func (h *Handlers) UnregisterService(c *gin.Context) {
 	systemName := c.Query("system_name")
 	serviceURI := c.Query("service_uri")
@@ -423,7 +404,7 @@ func (h *Handlers) UnregisterService(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Service unregistered successfully"})
 }
 
-// GetServiceByID handles GET /serviceregistry/mgmt/:id
+// Handle GET /serviceregistry/mgmt/:id
 func (h *Handlers) GetServiceByID(c *gin.Context) {
 	serviceIDStr := c.Param("id")
 	serviceID, err := strconv.Atoi(serviceIDStr)
@@ -446,7 +427,7 @@ func (h *Handlers) GetServiceByID(c *gin.Context) {
 	c.JSON(http.StatusOK, service)
 }
 
-// ListServices handles GET /serviceregistry/mgmt
+// Handle GET /serviceregistry/mgmt
 func (h *Handlers) ListServices(c *gin.Context) {
 	// Extract pagination and sorting parameters
 	sortField := c.DefaultQuery("sort_field", "id")
@@ -473,7 +454,34 @@ func (h *Handlers) ListServices(c *gin.Context) {
 
 // Authorization Endpoints
 
-// AddAuthorization handles POST /authorization/mgmt/intracloud
+// Handle POST /authorization/mgmt/intracloud/batch
+func (h *Handlers) AddAuthorizationsBatch(c *gin.Context) {
+	var reqs []pkg.AddAuthorizationRequest
+	if err := c.ShouldBindJSON(&reqs); err != nil {
+		h.respondWithError(c, pkg.BadRequestError("Invalid batch authorization request"))
+		return
+	}
+
+	authorizations, err := h.registry.AddAuthorizationsBatch(reqs)
+	if err != nil {
+		if appErr, ok := err.(*pkg.AppError); ok {
+			h.respondWithError(c, appErr)
+		} else {
+			h.logger.WithError(err).Error("An unexpected error occurred in AddAuthorizationsBatch")
+			h.respondWithError(c, pkg.InternalServerError("An unexpected internal error occurred"))
+		}
+		return
+	}
+
+	response := pkg.AuthorizationsResponse{
+		Data:  authorizations,
+		Count: len(authorizations),
+	}
+
+	c.JSON(http.StatusCreated, response)
+}
+
+// Handle POST /authorization/mgmt/intracloud
 func (h *Handlers) AddAuthorization(c *gin.Context) {
 	var req pkg.AddAuthorizationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -500,7 +508,7 @@ func (h *Handlers) AddAuthorization(c *gin.Context) {
 	c.JSON(http.StatusCreated, response)
 }
 
-// RemoveAuthorization handles DELETE /authorization/mgmt/intracloud/:id
+// Handle DELETE /authorization/mgmt/intracloud/:id
 func (h *Handlers) RemoveAuthorization(c *gin.Context) {
 	authIDStr := c.Param("id")
 	authID, err := strconv.Atoi(authIDStr)
@@ -522,7 +530,7 @@ func (h *Handlers) RemoveAuthorization(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Authorization removed successfully"})
 }
 
-// ListAuthorizations handles GET /authorization/mgmt/intracloud
+// Handle GET /authorization/mgmt/intracloud
 func (h *Handlers) ListAuthorizations(c *gin.Context) {
 	// Extract pagination and sorting parameters
 	sortField := c.DefaultQuery("sort_field", "id")
@@ -549,7 +557,7 @@ func (h *Handlers) ListAuthorizations(c *gin.Context) {
 
 // Orchestration Endpoints
 
-// Orchestrate handles POST /orchestrator/orchestration
+// Handle POST /orchestrator/orchestration
 func (h *Handlers) Orchestrate(c *gin.Context) {
 	var req pkg.OrchestrationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -585,7 +593,7 @@ func (h *Handlers) Orchestrate(c *gin.Context) {
 
 // Health and utility endpoints
 
-// HealthCheck handles GET /health
+// Handle GET /health
 func (h *Handlers) HealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":    "healthy",

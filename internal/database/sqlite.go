@@ -30,7 +30,6 @@ func NewSQLiteDB(connection string) (*SQLite, error) {
 
 func (s *SQLite) initSchema() error {
 	schema := `
-	-- Arrowhead 4.x Systems table
 	CREATE TABLE IF NOT EXISTS systems (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		system_name TEXT UNIQUE NOT NULL,
@@ -43,7 +42,6 @@ func (s *SQLite) initSchema() error {
 		UNIQUE(system_name, address, port)
 	);
 
-	-- Service Definitions table
 	CREATE TABLE IF NOT EXISTS service_definitions (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		service_definition TEXT UNIQUE NOT NULL,
@@ -51,7 +49,6 @@ func (s *SQLite) initSchema() error {
 		updated_at DATETIME NOT NULL
 	);
 
-	-- Interfaces table
 	CREATE TABLE IF NOT EXISTS interfaces (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		interface_name TEXT UNIQUE NOT NULL,
@@ -59,7 +56,6 @@ func (s *SQLite) initSchema() error {
 		updated_at DATETIME NOT NULL
 	);
 
-	-- Services table (Arrowhead 4.x)
 	CREATE TABLE IF NOT EXISTS services (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		service_definition_id INTEGER NOT NULL,
@@ -76,7 +72,6 @@ func (s *SQLite) initSchema() error {
 		UNIQUE(service_definition_id, provider_id, service_uri)
 	);
 
-	-- Service-Interface many-to-many relationship
 	CREATE TABLE IF NOT EXISTS service_interfaces (
 		service_id INTEGER NOT NULL,
 		interface_id INTEGER NOT NULL,
@@ -85,7 +80,6 @@ func (s *SQLite) initSchema() error {
 		FOREIGN KEY (interface_id) REFERENCES interfaces (id) ON DELETE CASCADE
 	);
 
-	-- Authorizations table (Arrowhead 4.x)
 	CREATE TABLE IF NOT EXISTS authorizations (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		consumer_id INTEGER NOT NULL,
@@ -99,7 +93,6 @@ func (s *SQLite) initSchema() error {
 		UNIQUE(consumer_id, provider_id, service_definition_id)
 	);
 
-	-- Authorization-Interface many-to-many relationship
 	CREATE TABLE IF NOT EXISTS authorization_interfaces (
 		authorization_id INTEGER NOT NULL,
 		interface_id INTEGER NOT NULL,
@@ -121,6 +114,45 @@ func (s *SQLite) initSchema() error {
 }
 
 // System operations
+func (s *SQLite) CreateSystemsBatch(systems []*pkg.System) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.Prepare(`
+	INSERT INTO systems (system_name, address, port, authentication_info, metadata, created_at, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, system := range systems {
+		metadataJSON := "{}"
+		if system.Metadata != nil {
+			if data, err := json.Marshal(system.Metadata); err == nil {
+				metadataJSON = string(data)
+			}
+		}
+
+		result, err := stmt.Exec(system.SystemName, system.Address, system.Port,
+			system.AuthenticationInfo, metadataJSON, system.CreatedAt, system.UpdatedAt)
+		if err != nil {
+			return fmt.Errorf("failed to insert system: %w", err)
+		}
+
+		id, err := result.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("failed to get system ID: %w", err)
+		}
+		system.ID = int(id)
+	}
+
+	return tx.Commit()
+}
 
 func (s *SQLite) CreateSystem(system *pkg.System) error {
 	metadataJSON := "{}"
@@ -130,8 +162,10 @@ func (s *SQLite) CreateSystem(system *pkg.System) error {
 		}
 	}
 
-	query := `INSERT INTO systems (system_name, address, port, authentication_info, metadata, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`
+	query := `
+	INSERT INTO systems (system_name, address, port, authentication_info, metadata, created_at, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?)
+	`
 
 	result, err := s.db.Exec(query, system.SystemName, system.Address, system.Port,
 		system.AuthenticationInfo, metadataJSON, system.CreatedAt, system.UpdatedAt)
@@ -149,24 +183,33 @@ func (s *SQLite) CreateSystem(system *pkg.System) error {
 }
 
 func (s *SQLite) GetSystemByID(id int) (*pkg.System, error) {
-	query := `SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
-		FROM systems WHERE id = ?`
+	query := `
+	SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
+	FROM systems
+	WHERE id = ?
+	`
 
 	row := s.db.QueryRow(query, id)
 	return s.scanSystem(row)
 }
 
 func (s *SQLite) GetSystemByName(systemName string) (*pkg.System, error) {
-	query := `SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
-		FROM systems WHERE system_name = ?`
+	query := `
+	SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
+	FROM systems
+	WHERE system_name = ?
+	`
 
 	row := s.db.QueryRow(query, systemName)
 	return s.scanSystem(row)
 }
 
 func (s *SQLite) GetSystemByParams(systemName, address string, port int) (*pkg.System, error) {
-	query := `SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
-		FROM systems WHERE system_name = ? AND address = ? AND port = ?`
+	query := `
+	SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
+	FROM systems
+	WHERE system_name = ? AND address = ? AND port = ?
+	`
 
 	row := s.db.QueryRow(query, systemName, address, port)
 	return s.scanSystem(row)
@@ -180,8 +223,11 @@ func (s *SQLite) UpdateSystem(system *pkg.System) error {
 		}
 	}
 
-	query := `UPDATE systems SET system_name = ?, address = ?, port = ?, authentication_info = ?,
-		metadata = ?, updated_at = ? WHERE id = ?`
+	query := `
+	UPDATE systems
+	SET system_name = ?, address = ?, port = ?, authentication_info = ?, metadata = ?, updated_at = ?
+	WHERE id = ?
+	`
 
 	_, err := s.db.Exec(query, system.SystemName, system.Address, system.Port,
 		system.AuthenticationInfo, metadataJSON, system.UpdatedAt, system.ID)
@@ -189,13 +235,21 @@ func (s *SQLite) UpdateSystem(system *pkg.System) error {
 }
 
 func (s *SQLite) DeleteSystemByID(id int) error {
-	query := `DELETE FROM systems WHERE id = ?`
+	query := `
+	DELETE
+	FROM systems
+	WHERE id = ?
+	`
 	_, err := s.db.Exec(query, id)
 	return err
 }
 
 func (s *SQLite) DeleteSystemByParams(systemName, address string, port int) error {
-	query := `DELETE FROM systems WHERE system_name = ? AND address = ? AND port = ?`
+	query := `
+	DELETE
+	FROM systems
+	WHERE system_name = ? AND address = ? AND port = ?
+	`
 	_, err := s.db.Exec(query, systemName, address, port)
 	return err
 }
@@ -214,17 +268,18 @@ func (s *SQLite) ListSystems(sortField, direction string) ([]pkg.System, error) 
 	// Get safe sort field or default
 	orderBy, ok := safeSortFields[sortField]
 	if !ok {
-		orderBy = "id" // Default sort
+		orderBy = "id"
 	}
 
 	// Validate direction
 	if direction != "ASC" && direction != "DESC" {
-		direction = "ASC" // Default direction
+		direction = "ASC"
 	}
 
 	// #nosec G202 - orderBy and direction are validated against whitelisted values
-	query := `SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
-		FROM systems ORDER BY ` + orderBy + ` ` + direction
+	query := `
+	SELECT id, system_name, address, port, authentication_info, metadata, created_at, updated_at
+	FROM systems ORDER BY ` + orderBy + ` ` + direction
 
 	rows, err := s.db.Query(query)
 	if err != nil {
@@ -232,7 +287,7 @@ func (s *SQLite) ListSystems(sortField, direction string) ([]pkg.System, error) 
 	}
 	defer rows.Close()
 
-	var systems []pkg.System
+	var systems []pkg.System = make([]pkg.System, 0)
 	for rows.Next() {
 		system, err := s.scanSystemFromRows(rows)
 		if err != nil {
@@ -292,8 +347,10 @@ func (s *SQLite) scanSystemFromRows(rows *sql.Rows) (*pkg.System, error) {
 // Service Definition operations
 
 func (s *SQLite) CreateServiceDefinition(serviceDef *pkg.ServiceDefinition) error {
-	query := `INSERT INTO service_definitions (service_definition, created_at, updated_at)
-		VALUES (?, ?, ?)`
+	query := `
+	INSERT INTO service_definitions (service_definition, created_at, updated_at)
+	VALUES (?, ?, ?)
+	`
 
 	result, err := s.db.Exec(query, serviceDef.ServiceDefinition, serviceDef.CreatedAt, serviceDef.UpdatedAt)
 	if err != nil {
@@ -310,7 +367,11 @@ func (s *SQLite) CreateServiceDefinition(serviceDef *pkg.ServiceDefinition) erro
 }
 
 func (s *SQLite) GetServiceDefinitionByID(id int) (*pkg.ServiceDefinition, error) {
-	query := `SELECT id, service_definition, created_at, updated_at FROM service_definitions WHERE id = ?`
+	query := `
+	SELECT id, service_definition, created_at, updated_at
+	FROM service_definitions
+	WHERE id = ?
+	`
 
 	row := s.db.QueryRow(query, id)
 	var serviceDef pkg.ServiceDefinition
@@ -331,7 +392,8 @@ func (s *SQLite) GetServiceDefinitionByID(id int) (*pkg.ServiceDefinition, error
 }
 
 func (s *SQLite) GetServiceDefinitionByName(name string) (*pkg.ServiceDefinition, error) {
-	query := `SELECT id, service_definition, created_at, updated_at FROM service_definitions WHERE service_definition = ?`
+	query := `
+	SELECT id, service_definition, created_at, updated_at FROM service_definitions WHERE service_definition = ?`
 
 	row := s.db.QueryRow(query, name)
 	var serviceDef pkg.ServiceDefinition
@@ -524,6 +586,66 @@ func (s *SQLite) CreateService(service *pkg.Service) error {
 	}
 
 	return nil
+}
+
+func (s *SQLite) CreateServicesBatch(services []*pkg.Service) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.Prepare(`INSERT INTO services (service_definition_id, provider_id, service_uri, end_of_validity, secure, metadata, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	ifaceStmt, err := tx.Prepare(`INSERT INTO service_interfaces (service_id, interface_id) VALUES (?, ?)`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare interface statement: %w", err)
+	}
+	defer ifaceStmt.Close()
+
+	for _, service := range services {
+		// Serialize metadata
+		metadataJSON := "{}"
+		if service.Metadata != nil {
+			if data, err := json.Marshal(service.Metadata); err == nil {
+				metadataJSON = string(data)
+			}
+		}
+
+		// Parse end of validity if provided
+		var endOfValidity *time.Time
+		if service.EndOfValidity != nil {
+			endOfValidity = service.EndOfValidity
+		}
+
+		// Insert service and get the ID
+		result, err := stmt.Exec(service.ServiceDefinition.ID, service.Provider.ID, service.ServiceUri,
+			endOfValidity, service.Secure, metadataJSON, service.Version, service.CreatedAt, service.UpdatedAt)
+		if err != nil {
+			return fmt.Errorf("failed to insert service: %w", err)
+		}
+
+		// Get the inserted service ID
+		id, err := result.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("failed to get service ID: %w", err)
+		}
+		service.ID = int(id)
+
+		// Insert interface relationships
+		for _, iface := range service.Interfaces {
+			_, err = ifaceStmt.Exec(service.ID, iface.ID)
+			if err != nil {
+				return fmt.Errorf("failed to insert service interface relationship: %w", err)
+			}
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (s *SQLite) GetServiceByID(id int) (*pkg.Service, error) {
@@ -738,6 +860,52 @@ func (s *SQLite) ListServices(sortField, direction string) ([]pkg.Service, error
 }
 
 // Authorization operations - Simplified implementation
+
+func (s *SQLite) CreateAuthorizationsBatch(auths []*pkg.Authorization) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.Prepare(`INSERT INTO authorizations (consumer_id, provider_id, service_definition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	ifaceStmt, err := tx.Prepare(`INSERT INTO authorization_interfaces (authorization_id, interface_id) VALUES (?, ?)`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare interface statement: %w", err)
+	}
+	defer ifaceStmt.Close()
+
+	for _, auth := range auths {
+		// Insert authorization and get the ID
+		result, err := stmt.Exec(auth.ConsumerSystem.ID, auth.ProviderSystem.ID, auth.ServiceDefinition.ID,
+			auth.CreatedAt, auth.UpdatedAt)
+		if err != nil {
+			return fmt.Errorf("failed to insert authorization: %w", err)
+		}
+
+		// Get the inserted authorization ID
+		id, err := result.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("failed to get authorization ID: %w", err)
+		}
+		auth.ID = int(id)
+
+		// Insert interface relationships
+		for _, iface := range auth.Interfaces {
+			_, err = ifaceStmt.Exec(auth.ID, iface.ID)
+			if err != nil {
+				return fmt.Errorf("failed to insert authorization interface relationship: %w", err)
+			}
+		}
+	}
+
+	return tx.Commit()
+}
 
 func (s *SQLite) CreateAuthorization(auth *pkg.Authorization) error {
 	// Start a transaction

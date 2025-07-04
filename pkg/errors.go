@@ -69,27 +69,27 @@ var (
 	ErrCertificateError = NewAppError(http.StatusInternalServerError, "Certificate error", "")
 )
 
-// BadRequestError error for invalid requests
+// Error for invalid requests
 func BadRequestError(message string) *AppError {
 	return NewAppError(http.StatusBadRequest, message, "")
 }
 
-// InvalidCredentials error for authentication failures
+// Error for authentication failures
 func UnauthorizedError(message string) *AppError {
 	return NewAppError(http.StatusUnauthorized, message, "")
 }
 
-// ForbiddenError error for access control violations
+// Error for access control violations
 func ForbiddenError(message string) *AppError {
 	return NewAppError(http.StatusForbidden, message, "")
 }
 
-// NotFoundError error for resources that cannot be found
+// Error for resources that cannot be found
 func NotFoundError(message string) *AppError {
 	return NewAppError(http.StatusNotFound, message, "")
 }
 
-// ConflictError error for resource conflicts (e.g., duplicate entries)
+// Error for resource conflicts (e.g., duplicate entries)
 func ConflictError(message string) *AppError {
 	return NewAppError(http.StatusConflict, message, "")
 }
@@ -99,11 +99,12 @@ func InternalServerError(message string) *AppError {
 	return NewAppError(http.StatusInternalServerError, message, "")
 }
 
-// DatabaseError error
+// Database error
 func DatabaseError(err error) *AppError {
 	return NewAppError(http.StatusInternalServerError, "Database error", err.Error())
 }
 
+// Configuration error
 func ConfigurationError(message string) *AppError {
 	return NewAppError(http.StatusInternalServerError, "Configuration error", message)
 }

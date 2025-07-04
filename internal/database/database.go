@@ -7,8 +7,10 @@ import (
 )
 
 type Database interface {
-	// System operations (Arrowhead 4.x)
+	// System operations
+
 	CreateSystem(system *pkg.System) error
+	CreateSystemsBatch(systems []*pkg.System) error
 	GetSystemByID(id int) (*pkg.System, error)
 	GetSystemByName(systemName string) (*pkg.System, error)
 	GetSystemByParams(systemName, address string, port int) (*pkg.System, error)
@@ -17,8 +19,9 @@ type Database interface {
 	DeleteSystemByParams(systemName, address string, port int) error
 	ListSystems(sortField, direction string) ([]pkg.System, error)
 
-	// Service operations (Arrowhead 4.x)
+	// Service operations
 	CreateService(service *pkg.Service) error
+	CreateServicesBatch(services []*pkg.Service) error
 	GetServiceByID(id int) (*pkg.Service, error)
 	GetServicesByProvider(providerID int) ([]pkg.Service, error)
 	GetServicesByDefinition(serviceDefinition string) ([]pkg.Service, error)
@@ -39,8 +42,9 @@ type Database interface {
 	GetInterfaceByName(name string) (*pkg.Interface, error)
 	ListInterfaces() ([]pkg.Interface, error)
 
-	// Authorization operations (Arrowhead 4.x)
+	// Authorization operations
 	CreateAuthorization(auth *pkg.Authorization) error
+	CreateAuthorizationsBatch(auths []*pkg.Authorization) error
 	GetAuthorizationByID(id int) (*pkg.Authorization, error)
 	GetAuthorizationsByConsumer(consumerID int) ([]pkg.Authorization, error)
 	GetAuthorizationsByProvider(providerID int) ([]pkg.Authorization, error)
@@ -54,12 +58,12 @@ type Database interface {
 	Close() error
 }
 
-// NewStorage creates database storage based on configuration
-func NewStorage(dbType string, connection string) (Database, error) {
+// NewDatabase creates database storage based on configuration
+func NewDatabase(dbType string, connection string) (Database, error) {
 	switch dbType {
-	case "postgres", "postgresql":
-		return NewPostgreSQL(connection)
-	case "sqlite", "sqlite3":
+	case "postgresql":
+		return NewPostgreSQLDB(connection)
+	case "sqlite":
 		return NewSQLiteDB(connection)
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s (supported: postgres, sqlite)", dbType)

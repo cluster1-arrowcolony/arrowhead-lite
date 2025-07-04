@@ -16,6 +16,8 @@
 # All generated files will be placed in the `certs/` directory.
 # ---
 
+# TODO: Could this logic be moved to Golang?
+
 set -e
 
 # Colors for output

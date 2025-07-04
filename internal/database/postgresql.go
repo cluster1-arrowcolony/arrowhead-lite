@@ -14,7 +14,7 @@ type PostgreSQLDB struct {
 	db *sql.DB
 }
 
-func NewPostgreSQL(connection string) (*PostgreSQLDB, error) {
+func NewPostgreSQLDB(connection string) (*PostgreSQLDB, error) {
 	db, err := sql.Open("postgres", connection)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
@@ -34,7 +34,6 @@ func NewPostgreSQL(connection string) (*PostgreSQLDB, error) {
 
 func (s *PostgreSQLDB) initSchema() error {
 	schema := `
-	-- Arrowhead 4.x Systems table
 	CREATE TABLE IF NOT EXISTS systems (
 		id SERIAL PRIMARY KEY,
 		system_name VARCHAR(255) UNIQUE NOT NULL,
@@ -47,7 +46,6 @@ func (s *PostgreSQLDB) initSchema() error {
 		UNIQUE(system_name, address, port)
 	);
 
-	-- Service Definitions table
 	CREATE TABLE IF NOT EXISTS service_definitions (
 		id SERIAL PRIMARY KEY,
 		service_definition VARCHAR(255) UNIQUE NOT NULL,
@@ -55,7 +53,6 @@ func (s *PostgreSQLDB) initSchema() error {
 		updated_at TIMESTAMP NOT NULL
 	);
 
-	-- Interfaces table
 	CREATE TABLE IF NOT EXISTS interfaces (
 		id SERIAL PRIMARY KEY,
 		interface_name VARCHAR(255) UNIQUE NOT NULL,
@@ -63,7 +60,6 @@ func (s *PostgreSQLDB) initSchema() error {
 		updated_at TIMESTAMP NOT NULL
 	);
 
-	-- Services table (Arrowhead 4.x)
 	CREATE TABLE IF NOT EXISTS services (
 		id SERIAL PRIMARY KEY,
 		service_definition_id INTEGER NOT NULL,
@@ -80,7 +76,6 @@ func (s *PostgreSQLDB) initSchema() error {
 		UNIQUE(service_definition_id, provider_id, service_uri)
 	);
 
-	-- Service-Interface many-to-many relationship
 	CREATE TABLE IF NOT EXISTS service_interfaces (
 		service_id INTEGER NOT NULL,
 		interface_id INTEGER NOT NULL,
@@ -89,7 +84,6 @@ func (s *PostgreSQLDB) initSchema() error {
 		FOREIGN KEY (interface_id) REFERENCES interfaces (id) ON DELETE CASCADE
 	);
 
-	-- Authorizations table (Arrowhead 4.x)
 	CREATE TABLE IF NOT EXISTS authorizations (
 		id SERIAL PRIMARY KEY,
 		consumer_id INTEGER NOT NULL,
@@ -103,7 +97,6 @@ func (s *PostgreSQLDB) initSchema() error {
 		UNIQUE(consumer_id, provider_id, service_definition_id)
 	);
 
-	-- Authorization-Interface many-to-many relationship
 	CREATE TABLE IF NOT EXISTS authorization_interfaces (
 		authorization_id INTEGER NOT NULL,
 		interface_id INTEGER NOT NULL,
@@ -126,6 +119,36 @@ func (s *PostgreSQLDB) initSchema() error {
 }
 
 // System operations
+func (s *PostgreSQLDB) CreateSystemsBatch(systems []*pkg.System) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.Prepare(`INSERT INTO systems (system_name, address, port, authentication_info, metadata, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, system := range systems {
+		metadataJSON := "{}"
+		if system.Metadata != nil {
+			if data, err := json.Marshal(system.Metadata); err == nil {
+				metadataJSON = string(data)
+			}
+		}
+
+		err = stmt.QueryRow(system.SystemName, system.Address, system.Port,
+			system.AuthenticationInfo, metadataJSON, system.CreatedAt, system.UpdatedAt).Scan(&system.ID)
+		if err != nil {
+			return fmt.Errorf("failed to insert system: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
 
 func (s *PostgreSQLDB) CreateSystem(system *pkg.System) error {
 	metadataJSON := "{}"
@@ -495,6 +518,59 @@ func (s *PostgreSQLDB) CreateService(service *pkg.Service) error {
 	return nil
 }
 
+func (s *PostgreSQLDB) CreateServicesBatch(services []*pkg.Service) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.Prepare(`INSERT INTO services (service_definition_id, provider_id, service_uri, end_of_validity, secure, metadata, version, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	ifaceStmt, err := tx.Prepare(`INSERT INTO service_interfaces (service_id, interface_id) VALUES ($1, $2)`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare interface statement: %w", err)
+	}
+	defer ifaceStmt.Close()
+
+	for _, service := range services {
+		// Serialize metadata
+		metadataJSON := "{}"
+		if service.Metadata != nil {
+			if data, err := json.Marshal(service.Metadata); err == nil {
+				metadataJSON = string(data)
+			}
+		}
+
+		// Parse end of validity if provided
+		var endOfValidity *time.Time
+		if service.EndOfValidity != nil {
+			endOfValidity = service.EndOfValidity
+		}
+
+		// Insert service and get the ID
+		err = stmt.QueryRow(service.ServiceDefinition.ID, service.Provider.ID, service.ServiceUri,
+			endOfValidity, service.Secure, metadataJSON, service.Version, service.CreatedAt, service.UpdatedAt).Scan(&service.ID)
+		if err != nil {
+			return fmt.Errorf("failed to insert service: %w", err)
+		}
+
+		// Insert interface relationships
+		for _, iface := range service.Interfaces {
+			_, err = ifaceStmt.Exec(service.ID, iface.ID)
+			if err != nil {
+				return fmt.Errorf("failed to insert service interface relationship: %w", err)
+			}
+		}
+	}
+
+	return tx.Commit()
+}
+
 func (s *PostgreSQLDB) GetServiceByID(id int) (*pkg.Service, error) {
 	// Query to get service with joined system and service definition data
 	query := `
@@ -707,6 +783,45 @@ func (s *PostgreSQLDB) ListServices(sortField, direction string) ([]pkg.Service,
 }
 
 // Authorization operations - Simplified implementation
+
+func (s *PostgreSQLDB) CreateAuthorizationsBatch(auths []*pkg.Authorization) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.Prepare(`INSERT INTO authorizations (consumer_id, provider_id, service_definition_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING id`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	ifaceStmt, err := tx.Prepare(`INSERT INTO authorization_interfaces (authorization_id, interface_id) VALUES ($1, $2)`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare interface statement: %w", err)
+	}
+	defer ifaceStmt.Close()
+
+	for _, auth := range auths {
+		// Insert authorization and get the ID
+		err = stmt.QueryRow(auth.ConsumerSystem.ID, auth.ProviderSystem.ID, auth.ServiceDefinition.ID,
+			auth.CreatedAt, auth.UpdatedAt).Scan(&auth.ID)
+		if err != nil {
+			return fmt.Errorf("failed to insert authorization: %w", err)
+		}
+
+		// Insert interface relationships
+		for _, iface := range auth.Interfaces {
+			_, err = ifaceStmt.Exec(auth.ID, iface.ID)
+			if err != nil {
+				return fmt.Errorf("failed to insert authorization interface relationship: %w", err)
+			}
+		}
+	}
+
+	return tx.Commit()
+}
 
 func (s *PostgreSQLDB) CreateAuthorization(auth *pkg.Authorization) error {
 	// Start a transaction
