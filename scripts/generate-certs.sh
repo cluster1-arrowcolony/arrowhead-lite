@@ -92,24 +92,26 @@ openssl genrsa -out "$CERT_DIR/sysop.key" 2048
 openssl req -new -key "$CERT_DIR/sysop.key" -out "$CERT_DIR/sysop.csr" -subj "/CN=sysop"
 openssl x509 -req -in "$CERT_DIR/sysop.csr" -CA "$CERT_DIR/truststore.pem" -CAkey "$CERT_DIR/ca.key" -CAcreateserial -out "$CERT_DIR/sysop.pem" -days 365
 
-# Prompt for a universal password
-echo -e "${YELLOW}Please set a password for all generated PKCS#12 files (.p12).${NC}"
-echo -e "Enter password, or press enter to use default (123456)"
-echo -n "Password: "
-read -s P12_PASSWORD
-# Use a default password if none is entered
-if [ -z "$P12_PASSWORD" ]; then
-    P12_PASSWORD="123456"
-    echo "Using default password '123456'."
+if [ -z "$PASSWORD" ]; then
+    # Prompt for a universal password
+    echo -e "${YELLOW}Please set a password for all generated PKCS#12 files (.p12).${NC}"
+    echo -e "Enter password, or press enter to use default (123456)"
+    echo -n "Password: "
+    read -s PASSWORD
+    # Use a default password if none is entered
+    if [ -z "$PASSWORD" ]; then
+        PASSWORD="123456"
+        echo "Using default password '123456'."
+    fi
 fi
 
 # Create sysop PKCS#12 bundle
-openssl pkcs12 -export -out "$CERT_DIR/sysop.p12" -inkey "$CERT_DIR/sysop.key" -in "$CERT_DIR/sysop.pem" -passout "pass:$P12_PASSWORD"
+openssl pkcs12 -export -out "$CERT_DIR/sysop.p12" -inkey "$CERT_DIR/sysop.key" -in "$CERT_DIR/sysop.pem" -passout "pass:$PASSWORD"
 echo "   📦 SysOp Bundle:   certs/sysop.p12 (for SDK 'systems ls')"
 
 # --- Step 4: Create the CA PKCS#12 Keystore for the Python SDK ---
 echo -e "${BLUE}4. Creating CA Keystore for Python SDK...${NC}"
-openssl pkcs12 -export -out "$CERT_DIR/ca.p12" -inkey "$CERT_DIR/ca.key" -in "$CERT_DIR/truststore.pem" -name "ArrowheadLiteLocalCA" -passout "pass:$P12_PASSWORD"
+openssl pkcs12 -export -out "$CERT_DIR/ca.p12" -inkey "$CERT_DIR/ca.key" -in "$CERT_DIR/truststore.pem" -name "ArrowheadLiteLocalCA" -passout "pass:$PASSWORD"
 echo "   📦 CA Keystore:    certs/ca.p12 (for SDK 'systems register')"
 
 # --- Step 5: Create JWT Signing Keys ---
