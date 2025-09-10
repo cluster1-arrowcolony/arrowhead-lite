@@ -1,8 +1,6 @@
 module git.ri.se/eu-cop-pilot/arrowhead-lite
 
-go 1.23.0
-
-toolchain go1.23.4
+go 1.23.12
 
 require (
 	github.com/gin-contrib/cors v1.6.0
