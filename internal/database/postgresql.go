@@ -130,7 +130,7 @@ func (s *PostgreSQLDB) CreateSystemsBatch(systems []*pkg.System) error {
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for _, system := range systems {
 		metadataJSON := "{}"
@@ -249,7 +249,7 @@ func (s *PostgreSQLDB) ListSystems(sortField, direction string) ([]pkg.System, e
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var systems []pkg.System
 	for rows.Next() {
@@ -367,7 +367,7 @@ func (s *PostgreSQLDB) ListServiceDefinitions() ([]pkg.ServiceDefinition, error)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var serviceDefs []pkg.ServiceDefinition
 	for rows.Next() {
@@ -445,7 +445,7 @@ func (s *PostgreSQLDB) ListInterfaces() ([]pkg.Interface, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var interfaces []pkg.Interface
 	for rows.Next() {
@@ -529,13 +529,13 @@ func (s *PostgreSQLDB) CreateServicesBatch(services []*pkg.Service) error {
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	ifaceStmt, err := tx.Prepare(`INSERT INTO service_interfaces (service_id, interface_id) VALUES ($1, $2)`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare interface statement: %w", err)
 	}
-	defer ifaceStmt.Close()
+	defer func() { _ = ifaceStmt.Close() }()
 
 	for _, service := range services {
 		// Serialize metadata
@@ -629,7 +629,7 @@ func (s *PostgreSQLDB) GetServiceByID(id int) (*pkg.Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query service interfaces: %w", err)
 	}
-	defer interfaceRows.Close()
+	defer func() { _ = interfaceRows.Close() }()
 
 	var interfaces []pkg.Interface
 	for interfaceRows.Next() {
@@ -712,7 +712,7 @@ func (s *PostgreSQLDB) ListServices(sortField, direction string) ([]pkg.Service,
 	if err != nil {
 		return nil, fmt.Errorf("failed to query services: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var services []pkg.Service
 	for rows.Next() {
@@ -795,13 +795,13 @@ func (s *PostgreSQLDB) CreateAuthorizationsBatch(auths []*pkg.Authorization) err
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	ifaceStmt, err := tx.Prepare(`INSERT INTO authorization_interfaces (authorization_id, interface_id) VALUES ($1, $2)`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare interface statement: %w", err)
 	}
-	defer ifaceStmt.Close()
+	defer func() { _ = ifaceStmt.Close() }()
 
 	for _, auth := range auths {
 		// Insert authorization and get the ID
@@ -919,7 +919,7 @@ func (s *PostgreSQLDB) GetAuthorizationByID(id int) (*pkg.Authorization, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to query authorization interfaces: %w", err)
 	}
-	defer interfaceRows.Close()
+	defer func() { _ = interfaceRows.Close() }()
 
 	var interfaces []pkg.Interface
 	for interfaceRows.Next() {
@@ -994,7 +994,7 @@ func (s *PostgreSQLDB) ListAuthorizations(sortField, direction string) ([]pkg.Au
 	if err != nil {
 		return nil, fmt.Errorf("failed to query authorizations: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var authorizations []pkg.Authorization
 	for rows.Next() {

@@ -36,7 +36,11 @@ func main() {
 	cfg, logger := readConfig()
 	logger.Info("Starting Arrowhead IoT Service Mesh")
 	db := createDatabase(cfg.Database, logger)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			logger.WithError(err).Error("Failed to close database")
+		}
+	}()
 	coreSystems := createCoreSystems(db, cfg, logger)
 	httpServer := createHTTPServer(cfg, coreSystems, logger)
 	runAndShutdownServer(httpServer, cfg, logger)
@@ -342,7 +346,7 @@ func loadTrustStore(truststoreFile string, logger *logrus.Logger) *x509.CertPool
 		return nil
 	}
 
-	caCert, err := os.ReadFile(truststoreFile)
+	caCert, err := os.ReadFile(truststoreFile) // #nosec G304
 	if err != nil {
 		logger.WithError(err).Fatalf("failed to read truststore file: %s", truststoreFile)
 		return nil
