@@ -6,7 +6,8 @@
 # This script creates a complete set of self-signed TLS certificates
 # and JWT signing keys for a secure, local development environment.
 #
-# It generates all files needed for both arrowhead-lite AND the Python SDK, including:
+# It generates all files needed for both arrowhead-lite AND the Python SDK, 
+# including:
 #   1. A local Certificate Authority (CA).
 #   2. A server certificate with a proper Subject Alternative Name (SAN).
 #   3. A 'sysop' admin client certificate.
@@ -15,8 +16,6 @@
 #
 # All generated files will be placed in the `certs/` directory.
 # ---
-
-# TODO: Could this logic be moved to Golang?
 
 set -e
 
@@ -57,7 +56,9 @@ echo "✅ Created clean 'certs' directory."
 # --- Step 1: Create the Certificate Authority (CA) ---
 echo -e "${BLUE}1. Creating local Certificate Authority (CA)...${NC}"
 openssl genrsa -out "$CERT_DIR/ca.key" 4096
-openssl req -x509 -new -nodes -key "$CERT_DIR/ca.key" -sha256 -days 3650 -out "$CERT_DIR/truststore.pem" -subj "/CN=ArrowheadLiteLocalCA"
+openssl req -x509 -new -nodes -key "$CERT_DIR/ca.key" -sha256 -days 3650 -out "$CERT_DIR/truststore.pem" -subj "/CN=ArrowheadLiteLocalCA" \
+    -addext "basicConstraints=critical,CA:TRUE" \
+    -addext "keyUsage=critical,keyCertSign"
 echo "   📜 CA Public Cert: certs/truststore.pem"
 echo "   🔑 CA Private Key: certs/ca.key"
 
@@ -133,7 +134,6 @@ echo "  - sysop.p12:              For the Python SDK to run management commands.
 echo "  - ca.p12:                 For the Python SDK to register new systems."
 echo "  - auth-*.pem:             For JWT signing and verification."
 echo -e "${YELLOW}Next Steps:${NC}"
-echo "1. Ensure 'configs/config.yaml' has TLS enabled."
-echo "2. Run './bin/arrowhead-lite' to start the server."
-echo "3. Update and source your 'arrowhead-lite.env' in the Python SDK project."
+echo "1. Run './bin/arrowhead-lite' to start the server."
+echo "2. Update and source your 'arrowhead-lite.env' in the Python SDK project."
 echo "   (Make sure ARROWHEAD_ROOT_KEYSTORE points to 'certs/ca.p12')"

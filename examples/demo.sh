@@ -14,10 +14,24 @@ cd "$(dirname "$0")/.."
 
 # --- Configuration ---
 SERVER_BINARY="./bin/arrowhead-lite"
-SERVER_URL="http://localhost:8443"
+SERVER_URL="https://localhost:8443" # Use HTTPS
 USING_EXTERNAL_SERVER=false
 
-# --- Helper function for curl with optional mTLS ---
+# Certificate configuration
+TRUSTSTORE="certs/truststore.pem"
+CLIENT_CERT="certs/sysop.pem"
+CLIENT_KEY="certs/sysop.key"
+CERT_GEN_SCRIPT="scripts/generate-certs.sh"
+
+# --- Check for certificates ---
+if [ ! -f "$TRUSTSTORE" ] || [ ! -f "$CLIENT_CERT" ] || [ ! -f "$CLIENT_KEY" ]; then
+    echo "Error: Required certificates not found in the certs/ directory."
+    echo "Please run './${CERT_GEN_SCRIPT}' to generate them first."
+    exit 1
+fi
+
+
+# --- Helper function for curl with mTLS ---
 make_curl_request() {
     local method=$1
     local url=$2
@@ -25,7 +39,8 @@ make_curl_request() {
     local data=$4
     local status_code_only=${5:-false}
     
-    local curl_cmd="curl -s"
+    # Add mTLS and CA cert flags to all requests
+    local curl_cmd="curl -s --cacert \"$TRUSTSTORE\" --cert \"$CLIENT_CERT\" --key \"$CLIENT_KEY\""
     
     if [ "$method" != "GET" ]; then
         curl_cmd="$curl_cmd -X $method"
@@ -56,7 +71,8 @@ echo "======================"
 echo ""
 
 function check_health() {
-  curl -s --fail ${SERVER_URL}/health > /dev/null
+  # The server requires a client cert for all connections, even if the endpoint doesn't use it for auth.
+  curl -s --fail --cacert "$TRUSTSTORE" --cert "$CLIENT_CERT" --key "$CLIENT_KEY" ${SERVER_URL}/health > /dev/null
 }
 
 # Function to register a system
@@ -158,7 +174,7 @@ else
     [ -f "./arrowhead.db" ] && echo "🧹 Cleaning up old database..." && rm -f ./arrowhead.db
     [ ! -f "$SERVER_BINARY" ] && echo "📦 Building application..." && make build
     
-    $SERVER_BINARY --disable-tls &
+    $SERVER_BINARY &
     SERVER_PID=$!
     echo "✅ Server starting (PID: $SERVER_PID)"
     
