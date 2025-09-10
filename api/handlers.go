@@ -63,29 +63,29 @@ func (h *Handlers) AuthMiddleware() gin.HandlerFunc {
 		if !isAdmin {
 			// Look up the system ID from the database
 			system, err := h.registry.GetSystemByName(systemName)
+
 			if err != nil {
-				h.logger.WithError(err).WithField("system_name", systemName).Error("Failed to lookup system")
-				h.respondWithError(c, pkg.UnauthorizedError("System not found"))
-				return
+				// A "Not Found" error is acceptable here, as it indicates a new system is trying to register.
+				var appErr, ok = err.(*pkg.AppError)
+				if !ok || (ok && appErr.Code != http.StatusNotFound) {
+					h.logger.WithError(err).WithField("system_name", systemName).Error("Failed to lookup system")
+					h.respondWithError(c, pkg.UnauthorizedError("System lookup failed"))
+					return
+				}
 			}
-			if system == nil {
-				h.logger.WithField("system_name", systemName).Warn("System not registered")
-				h.respondWithError(c, pkg.UnauthorizedError("System not registered"))
-				return
+
+			if system != nil {
+				systemID = system.ID
 			}
-			systemID = system.ID
 		}
 
-		// Set context for the request
+		c.Set("is_admin", isAdmin)
+		c.Set("system_name", systemName)
+		c.Set("system_id", systemID)
+
 		if isAdmin {
-			c.Set("is_admin", true)
-			c.Set("system_name", systemName)
-			c.Set("system_id", 0)
 			h.logger.WithField("system", systemName).Debug("Admin authenticated via mTLS")
 		} else {
-			c.Set("is_admin", false)
-			c.Set("system_name", systemName)
-			c.Set("system_id", systemID)
 			h.logger.WithFields(logrus.Fields{
 				"system":    systemName,
 				"system_id": systemID,
