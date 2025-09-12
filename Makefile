@@ -1,4 +1,4 @@
-.PHONY: all build test install clean check fmt vet lint security
+.PHONY: all build test test-coverage test-verbose install clean check fmt vet lint security
 
 # Build variables
 VERSION ?= 1.0.0
@@ -17,13 +17,24 @@ build:
 
 test:
 	@echo "Running tests..."
+	go test -race ./...
+
+test-verbose:
+	@echo "Running tests with verbose output..."
 	go test -v -race ./...
+
+test-coverage:
+	@echo "Running tests with coverage..."
+	go test -race -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
 
 install: build
 	sudo cp bin/arrowhead-lite /usr/local/bin/
 
 clean:
 	rm -f bin/arrowhead-lite
+	rm -f coverage.out coverage.html
 
 dev: build
 	./bin/arrowhead-lite
