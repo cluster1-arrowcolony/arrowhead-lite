@@ -48,8 +48,8 @@ http://localhost:8443
 ```
 
 **Note**: Accessing the dashboard requires a one-time setup because the server uses high-security mutual TLS (mTLS) with self-signed certificates. If you want to access the dashboard, you must (on macOS):
-* **Trust the server CA**: In the **Keychain Access** app, select the `System` keychain (top-left), then go to `File` -> `Import Items` and import `arrowhead-lite/certs/truststore.pem`. Find the new `ArrowheadLiteLocalCA` certificate in the `Certificates` tab, double-click it, expand the `Trust` section, and change the setting to `Always Trust`.
-* **Import client certificate**: In the **Keychain Access** app, select the `login` keychain (top-left), then go to `File` > `Import Items` and import `arrowhead-lite/certs/sysop.p12`. The certificate password is `123456`. When you reload the page in Chrome, a pop-up will appear; select the sysop certificate to continue. You may need to enter your macOS password to allow access to the private key.
+* **Trust the server CA**: In the **Keychain Access** app, select the `System` keychain under `System Keychains` (top-left), then go to `File` -> `Import Items` and import `arrowhead-lite/certs/truststore.pem`. Find the new `ArrowheadLiteLocalCA` certificate in the `Certificates` tab, double-click it, expand the `Trust` section, and change the `When using this certificate` setting to `Always Trust`.
+* **Import client certificate**: In the **Keychain Access** app, select the `login` keychain under `Default Keychains` (top-left), then go to `File` > `Import Items` and import `arrowhead-lite/certs/sysop.p12`. The default certificate password is `123456`. When you reload the `http://localhost:8443` page in Chrome, a pop-up will appear. Select the sysop certificate to continue. You may need to enter your macOS password to allow access to the private key.
 
 Other OS's follow similar steps to trust the CA and import the client certificate, but use other apps than **Keychain Access**.
 
