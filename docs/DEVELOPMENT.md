@@ -90,12 +90,12 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-added-large-files
-  
+
   - repo: https://github.com/golangci/golangci-lint
     rev: v1.54.2
     hooks:
       - id: golangci-lint
-  
+
   - repo: local
     hooks:
       - id: go-fmt
@@ -103,7 +103,7 @@ repos:
         entry: go fmt ./...
         language: system
         pass_filenames: false
-      
+
       - id: go-test
         name: go test
         entry: go test ./...
@@ -296,17 +296,17 @@ func TestRegisterService(t *testing.T) {
     // Arrange
     mockDB := new(MockDatabase)
     registry := NewRegistry(mockDB)
-    
+
     service := &Service{
         Name: "temperature-sensor",
         Port: 8080,
     }
-    
+
     mockDB.On("CreateService", service).Return(nil)
-    
+
     // Act
     err := registry.RegisterService(service)
-    
+
     // Assert
     assert.NoError(t, err)
     mockDB.AssertExpectations(t)
@@ -316,16 +316,16 @@ func TestRegisterService_DuplicateName(t *testing.T) {
     // Test duplicate service name handling
     mockDB := new(MockDatabase)
     registry := NewRegistry(mockDB)
-    
+
     service := &Service{
         Name: "existing-service",
     }
-    
+
     mockDB.On("CreateService", service).
         Return(ErrServiceExists)
-    
+
     err := registry.RegisterService(service)
-    
+
     assert.Error(t, err)
     assert.Equal(t, ErrServiceExists, err)
 }
@@ -346,10 +346,10 @@ import (
 func TestServiceRegistrationFlow(t *testing.T) {
     // Setup test server
     router := setupTestRouter()
-    
+
     // Register a system
     w := httptest.NewRecorder()
-    req := httptest.NewRequest("POST", "/serviceregistry/register", 
+    req := httptest.NewRequest("POST", "/serviceregistry/register",
         strings.NewReader(`{
             "system": {
                 "systemName": "test-system",
@@ -358,9 +358,9 @@ func TestServiceRegistrationFlow(t *testing.T) {
             }
         }`))
     router.ServeHTTP(w, req)
-    
+
     assert.Equal(t, 201, w.Code)
-    
+
     // Query for the service
     w = httptest.NewRecorder()
     req = httptest.NewRequest("POST", "/serviceregistry/query",
@@ -368,9 +368,9 @@ func TestServiceRegistrationFlow(t *testing.T) {
             "serviceDefinitionRequirement": "test-system"
         }`))
     router.ServeHTTP(w, req)
-    
+
     assert.Equal(t, 200, w.Code)
-    
+
     var result QueryResult
     json.Unmarshal(w.Body.Bytes(), &result)
     assert.Len(t, result.Services, 1)
@@ -394,7 +394,7 @@ func TestValidateSystemName(t *testing.T) {
         {"with special char", "system@123", false},
         {"too long", strings.Repeat("a", 256), false},
     }
-    
+
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             result := ValidateSystemName(tt.input)
@@ -556,24 +556,24 @@ func ProcessRequest(req *Request) error {
         "method": req.Method,
         "path": req.Path,
     })
-    
+
     logger.Debug("Processing request")
-    
+
     // Add timing information
     start := time.Now()
     defer func() {
         logger.WithField("duration", time.Since(start)).
             Debug("Request processed")
     }()
-    
+
     // Log important state changes
     logger.WithField("state", "validation").Debug("Validating request")
-    
+
     if err := validate(req); err != nil {
         logger.WithError(err).Error("Validation failed")
         return err
     }
-    
+
     return nil
 }
 ```
@@ -587,18 +587,18 @@ func ProcessRequest(req *Request) error {
 // api/handlers/new_feature.go
 func (h *Handlers) NewFeatureHandler(c *gin.Context) {
     var req NewFeatureRequest
-    
+
     if err := c.ShouldBindJSON(&req); err != nil {
         c.JSON(400, gin.H{"error": err.Error()})
         return
     }
-    
+
     result, err := h.service.ProcessNewFeature(req)
     if err != nil {
         c.JSON(500, gin.H{"error": err.Error()})
         return
     }
-    
+
     c.JSON(200, result)
 }
 ```
@@ -678,18 +678,18 @@ DROP TABLE IF EXISTS features;
 func setupTestDB(t *testing.T) *sql.DB {
     db, err := sql.Open("sqlite3", ":memory:")
     require.NoError(t, err)
-    
+
     // Run migrations
     err = RunMigrations(db)
     require.NoError(t, err)
-    
+
     return db
 }
 
 func TestDatabaseOperation(t *testing.T) {
     db := setupTestDB(t)
     defer db.Close()
-    
+
     // Test database operations
 }
 ```
@@ -717,7 +717,7 @@ go tool pprof -http=:8080 cpu.prof
 func BenchmarkServiceRegistration(b *testing.B) {
     registry := setupRegistry()
     service := createTestService()
-    
+
     b.ResetTimer()
     for i := 0; i < b.N; i++ {
         registry.RegisterService(service)
@@ -726,7 +726,7 @@ func BenchmarkServiceRegistration(b *testing.B) {
 
 func BenchmarkParallel(b *testing.B) {
     registry := setupRegistry()
-    
+
     b.RunParallel(func(pb *testing.PB) {
         for pb.Next() {
             registry.QueryServices(QueryRequest{})

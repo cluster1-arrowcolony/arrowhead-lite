@@ -60,9 +60,15 @@ Other OS's follow similar steps to trust the CA and import the client certificat
 
 The demo script showcases a mining IoT scenario with device registration, service creation, and authorization rules.
 
-## Interacting with `arrowhead-lite`
+## Documentation
 
-To interact with `arrowhead-lite`, the recommended method is to use the [Python SDK](https://github.com/cluster1-arrowcolony/arrowhead-python-sdk). In the future, more SDKs may be provided. To use arrowhead-lite manually, see the [Manual](./docs/manual.md).
+**For comprehensive documentation, see [docs/README.md](./docs/README.md)**
+
+- **Application Developers**: See [docs/APPLICATION_DEVELOPMENT.md](./docs/APPLICATION_DEVELOPMENT.md) for service integration
+- **System Administrators**: See [docs/OPERATIONS_GUIDE.md](./docs/OPERATIONS_GUIDE.md) for deployment and operations
+- **SDKs for easier integration:**
+  - Python: [Arrowhead Python SDK](https://github.com/cluster1-arrowcolony/arrowhead-python-sdk)
+  - Go: [Arrowhead Go Client](https://github.com/eislab-cps/arrowhead-client-go)
 
 ## Arrowhead Framework Compatibility
 
@@ -70,12 +76,7 @@ This implementation follows the Arrowhead Framework specification and provides f
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Run `make check`
-6. Submit a pull request
+Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
 ## License
 

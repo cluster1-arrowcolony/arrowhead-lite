@@ -11,12 +11,12 @@ sequenceDiagram
     participant DB as Database
 
     Note over Client, DB: Phase 1: System Registration
-    
+
     Client->>API: POST /serviceregistry/mgmt/systems<br/>(mTLS client certificate)
     API->>Auth: Validate client certificate
     Auth->>Auth: Check certificate against truststore
-    Auth-->>API: Certificate valid ✅
-    
+    Auth-->>API: Certificate valid
+
     API->>Registry: RegisterSystem(req)
     Registry->>DB: Check if system exists
     DB-->>Registry: System not found
@@ -24,26 +24,26 @@ sequenceDiagram
     DB-->>Registry: System created (ID: 123)
     Registry-->>API: System object (ID: 123)
     API-->>Client: 201 Created<br/>{"id": 123, "systemName": "temp-sensor", ...}
-    
+
     Note over Client, DB: Phase 2: Service Registration
-    
+
     Client->>API: POST /serviceregistry/mgmt/services<br/>(mTLS client certificate)
     API->>Auth: Validate client certificate
-    Auth-->>API: Certificate valid ✅
-    
+    Auth-->>API: Certificate valid
+
     API->>Registry: RegisterServiceMgmt(req)
     Registry->>Registry: Get or create provider system
     Registry->>Registry: Get or create service definition
     Registry->>Registry: Get or create interfaces
-    
+
     Registry->>DB: CREATE service entry
     Registry->>DB: CREATE service definition (if new)
     Registry->>DB: CREATE interfaces (if new)
-    
+
     DB-->>Registry: Service created (ID: 456)
     Registry-->>API: Service object (ID: 456)
     API-->>Client: 201 Created<br/>{"id": 456, "serviceDefinition": "temperature-reading", ...}
-    
+
     Note over Client, DB: System and service are now registered and discoverable
 ```
 

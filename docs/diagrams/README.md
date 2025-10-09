@@ -10,7 +10,7 @@ Shows how the `generate-certs.sh` script creates a complete PKI infrastructure f
 ### [2. System and Service Registration](./2-system-service-registration.md)
 Illustrates the two-phase process for IoT devices to register themselves and their services with the Arrowhead framework using mTLS authentication.
 
-### [3. Service Orchestration Flow](./3-orchestration-flow.md) 
+### [3. Service Orchestration Flow](./3-orchestration-flow.md)
 Documents the core "matchmaking" process where consumers discover authorized providers for specific services through the orchestrator's filtering and authorization logic.
 
 ### [4. Direct Service Consumption](./4-service-consumption.md)

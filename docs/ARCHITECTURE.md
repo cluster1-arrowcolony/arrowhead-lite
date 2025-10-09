@@ -64,6 +64,8 @@ Arrowhead Lite is a lightweight, single-binary implementation of the Arrowhead F
                 └───────────────────────┘
 ```
 
+**Visual Diagrams**: For detailed sequence diagrams showing system interactions, see [diagrams/README.md](./diagrams/README.md)
+
 ## Core Components
 
 ### 1. Main Application (`cmd/main.go`)
@@ -108,6 +110,8 @@ Manages system and service lifecycle:
 - Heartbeat monitoring for liveness
 - Event emission for registry changes
 
+**See diagram**: [System and Service Registration](./diagrams/2-system-service-registration.md)
+
 Data structures:
 ```go
 type System struct {
@@ -141,6 +145,8 @@ Key features:
 - Certificate thumbprint validation
 - Rule priority and conflict resolution
 
+**See diagram**: [Authorization Rule Creation](./diagrams/5-authorization-rule-creation.md)
+
 #### Orchestration Service (`internal/orchestration/`)
 Provides service matching:
 - Service requirement analysis
@@ -156,6 +162,10 @@ Orchestration flow:
 4. Apply QoS and preference filters
 5. Return ranked provider list
 
+**See diagrams**:
+- [Service Orchestration Flow](./diagrams/3-orchestration-flow.md)
+- [Direct Service Consumption](./diagrams/4-service-consumption.md)
+
 #### Certificate Authority (`internal/ca/`)
 Manages PKI infrastructure:
 - CSR validation and signing
@@ -168,6 +178,8 @@ Certificate types:
 - Service certificates for specific operations
 - Temporary certificates for testing
 
+**See diagram**: [Certificate Generation (Development)](./diagrams/1-cert-generation-dev.md)
+
 ### 4. Database Layer (`internal/database/`)
 
 #### Storage Interface
@@ -179,15 +191,15 @@ type Storage interface {
     GetSystem(id int64) (*models.System, error)
     UpdateSystem(system *models.System) error
     DeleteSystem(id int64) error
-    
+
     // Service operations
     CreateService(service *models.Service) error
     QueryServices(criteria QueryCriteria) ([]*models.Service, error)
-    
+
     // Authorization operations
     CreateAuthRule(rule *models.AuthRule) error
     CheckAuthorization(consumer, provider, service) (bool, error)
-    
+
     // Transaction support
     BeginTx() (*sql.Tx, error)
     CommitTx(tx *sql.Tx) error

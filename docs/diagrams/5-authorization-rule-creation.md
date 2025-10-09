@@ -11,43 +11,43 @@ sequenceDiagram
     participant DB as Database
 
     Admin->>API: POST /authorization/mgmt/intracloud<br/>(sysop mTLS certificate)<br/>{"consumerId": 1, "providerIds": [2,3], "serviceDefinitionIds": [5,6], "interfaceIds": [1]}
-    
+
     API->>Auth: Validate sysop certificate
     Auth->>Auth: Check certificate CN = "sysop"<br/>Grant admin privileges
-    Auth-->>API: Admin authenticated ✅
-    
+    Auth-->>API: Admin authenticated
+
     API->>Registry: AddAuthorization(request)
-    
+
     Note over Registry: Validate entities exist
-    
+
     Registry->>DB: SELECT system WHERE id = 1 (consumer)
     DB-->>Registry: Consumer system found
-    
+
     loop For each provider ID [2,3]
         Registry->>DB: SELECT system WHERE id = providerID
         DB-->>Registry: Provider system found
     end
-    
+
     loop For each service definition ID [5,6]
         Registry->>DB: SELECT service_definition WHERE id = serviceDefID
         DB-->>Registry: Service definition found
     end
-    
+
     loop For each interface ID [1]
         Registry->>DB: SELECT interface WHERE id = interfaceID
         DB-->>Registry: Interface found
     end
-    
+
     Note over Registry: Create authorization rules for all combinations<br/>(2 providers × 2 service definitions = 4 rules)
-    
+
     loop For each provider × service definition combination
         Registry->>DB: INSERT INTO authorizations<br/>(consumer_id, provider_id, service_def_id, interfaces, created_at)
         DB-->>Registry: Authorization rule created
     end
-    
+
     Registry-->>API: Created authorizations: [Rule1, Rule2, Rule3, Rule4]
     API-->>Admin: 201 Created<br/>{"data": [...], "count": 4}
-    
+
     Note over Admin: Authorization rules are now active<br/>Consumers can discover and access provider services
 ```
 
@@ -78,15 +78,15 @@ As of the recent enhancement, a single authorization request can create multiple
 
 The sysop certificate grants special privileges:
 - **System Management**: Register/unregister any system
-- **Service Management**: Register/unregister any service  
+- **Service Management**: Register/unregister any service
 - **Authorization Control**: Create/delete authorization rules
 - **Global Access**: No authorization checks for sysop operations
 
 ## Rule Validation
 
 Before creating rules, the system validates:
-- ✅ Consumer system exists and is registered
-- ✅ All provider systems exist and are registered
-- ✅ All service definitions exist in the registry
-- ✅ All specified interfaces are supported
-- ❌ Duplicate rules are rejected (unique constraint)
+-  Consumer system exists and is registered
+-  All provider systems exist and are registered
+-  All service definitions exist in the registry
+-  All specified interfaces are supported
+-  Duplicate rules are rejected (unique constraint)

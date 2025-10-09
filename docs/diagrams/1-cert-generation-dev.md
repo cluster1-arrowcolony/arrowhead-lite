@@ -11,38 +11,38 @@ sequenceDiagram
 
     Developer->>Script: Execute ./scripts/generate-certs.sh
     Note over Script: Starting certificate generation process
-    
+
     Script->>OpenSSL: Generate CA private key
     OpenSSL->>FS: Save ca.key
-    
+
     Script->>OpenSSL: Generate CA certificate (self-signed)
     OpenSSL->>FS: Save truststore.pem
-    
+
     Script->>OpenSSL: Generate server private key
     OpenSSL->>FS: Save server.key
-    
+
     Script->>OpenSSL: Generate server certificate (signed by CA)
     OpenSSL->>FS: Save server.pem
-    
+
     Script->>OpenSSL: Generate admin client private key
     OpenSSL->>FS: Save sysop.key
-    
+
     Script->>OpenSSL: Generate admin client certificate (signed by CA)
     OpenSSL->>FS: Save sysop.pem
-    
+
     Script->>OpenSSL: Create admin PKCS#12 bundle
     OpenSSL->>FS: Save sysop.p12
-    
+
     Script->>OpenSSL: Create CA PKCS#12 keystore
     OpenSSL->>FS: Save ca.p12
-    
+
     Script->>OpenSSL: Generate JWT signing private key
     OpenSSL->>FS: Save auth-private.pem
-    
+
     Script->>OpenSSL: Extract JWT verification public key
     OpenSSL->>FS: Save auth-public.pem
-    
-    Script->>Developer: Report completion ✅
+
+    Script->>Developer: Report completion
     Note over FS: Complete certificate set ready for development
 ```
 
@@ -67,4 +67,4 @@ sequenceDiagram
 
 ## Security Notice
 
-⚠️ **These certificates are self-signed and intended for development only.** Do not use in production environments.
+**WARNING: These certificates are self-signed and intended for development only.** Do not use in production environments.

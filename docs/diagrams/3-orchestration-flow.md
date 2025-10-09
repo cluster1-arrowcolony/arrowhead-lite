@@ -12,42 +12,42 @@ sequenceDiagram
     participant DB as Database
 
     Consumer->>API: POST /orchestrator/orchestration<br/>(mTLS authenticated)<br/>{"requestedService": {"serviceDefinitionRequirement": "temperature-reading"}}
-    
+
     API->>Orch: Orchestrate(request)
     Note over Orch: Begin service discovery process
-    
+
     Orch->>Registry: Find matching services<br/>("temperature-reading")
     Registry->>DB: SELECT services WHERE serviceDefinition = "temperature-reading"
     DB-->>Registry: List of candidate provider services
     Registry-->>Orch: Candidate services: [Service1, Service2, Service3]
-    
+
     Note over Orch: Filter services by authorization
-    
+
     loop For each candidate service
         Orch->>Auth: Is consumer allowed to use this provider's service?<br/>(consumerID, providerID, serviceDefID)
         Auth->>DB: SELECT FROM authorizations WHERE<br/>consumer=ID AND provider=ID AND service=ID
         DB-->>Auth: Authorization rule found/not found
         Auth-->>Orch: true/false
-        
+
         alt Authorization exists
-            Note over Orch: ✅ Keep this service
+            Note over Orch:  Keep this service
         else No authorization
-            Note over Orch: ❌ Filter out this service
+            Note over Orch:  Filter out this service
         end
     end
-    
+
     Note over Orch: Rank authorized services and generate tokens
-    
+
     loop For each authorized service
         Orch->>Auth: Generate service token<br/>(consumerID, providerID, serviceID)
         Auth-->>Orch: JWT authorization token
     end
-    
+
     Note over Orch: Prepare orchestration response
-    
+
     Orch-->>API: OrchestrationResponse<br/>{services: [...], tokens: [...]}
     API-->>Consumer: 200 OK<br/>List of authorized providers with tokens
-    
+
     Note over Consumer: Consumer can now directly contact any provider using the tokens
 ```
 
@@ -75,7 +75,7 @@ sequenceDiagram
 
 The authorization check validates:
 - Consumer system exists and is authenticated
-- Provider system is registered and available  
+- Provider system is registered and available
 - Authorization rule exists linking consumer → provider → service
 - Service definition and interfaces match requirements
 
@@ -83,7 +83,7 @@ The authorization check validates:
 
 Generated JWT tokens contain:
 - Consumer system identity
-- Provider system identity  
+- Provider system identity
 - Service access permissions
 - Token expiration time
 - Digital signature for verification

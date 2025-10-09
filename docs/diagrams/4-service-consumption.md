@@ -6,29 +6,29 @@ This diagram illustrates the final step in the interaction chain: direct communi
 sequenceDiagram
     participant Consumer as Consumer System
     participant Provider as Provider System
-    
+
     Note over Consumer: Consumer has received orchestration response<br/>with provider details and authorization token
-    
+
     Consumer->>Consumer: Parse orchestration response<br/>Extract: IP, port, URI, auth token
-    
+
     Note over Consumer, Provider: Direct service communication (arrowhead-lite not involved)
-    
+
     Consumer->>Provider: HTTP GET/POST {provider-ip}:{port}{uri}<br/>Header: Authorization: Bearer {token}<br/>Example: GET http://192.168.1.100:8080/api/temperature
-    
+
     Provider->>Provider: Validate authorization token<br/>• Check JWT signature against arrowhead-lite public key<br/>• Verify token hasn't expired<br/>• Confirm consumer permissions
-    
+
     alt Token is valid
         Provider->>Provider: Process service request<br/>• Read temperature sensor<br/>• Format response data
         Provider-->>Consumer: 200 OK<br/>{"temperature": 23.5, "unit": "celsius", "timestamp": "2024-01-15T10:30:00Z"}
-        
-        Note over Consumer: Service data received successfully ✅
-        
+
+        Note over Consumer: Service data received successfully
+
     else Token is invalid/expired
         Provider-->>Consumer: 401 Unauthorized<br/>{"error": "Invalid or expired authorization token"}
-        
+
         Note over Consumer: Must request new orchestration<br/>to get fresh token
     end
-    
+
     Note over Consumer, Provider: Subsequent requests can reuse the same token<br/>until it expires (typically 24 hours)
 ```
 
@@ -58,6 +58,6 @@ The provider system must:
 ## Error Scenarios
 
 - **Invalid Token**: Token signature doesn't match or is malformed
-- **Expired Token**: Token timestamp has passed expiration time  
+- **Expired Token**: Token timestamp has passed expiration time
 - **Wrong Consumer**: Token was issued for a different consumer system
 - **Service Mismatch**: Token doesn't grant access to the requested service
