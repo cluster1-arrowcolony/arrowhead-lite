@@ -1,3 +1,13 @@
+// Package handlers implements HTTP request handlers for the Arrowhead REST API.
+//
+// This package provides Gin-based HTTP handlers that implement the Arrowhead Framework 4.x
+// REST API specification, including endpoints for:
+//   - Service Registry (system/service registration and discovery)
+//   - Authorization (rule management and access control)
+//   - Orchestration (service matching and recommendations)
+//   - Health checks and metrics
+//
+// All handlers use structured error responses and support both JSON input/output.
 package handlers
 
 import (

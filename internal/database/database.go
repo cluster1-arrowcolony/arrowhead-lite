@@ -1,3 +1,11 @@
+// Package database provides a storage abstraction layer for Arrowhead core services.
+//
+// This package defines the Database interface that abstracts persistence operations
+// for systems, services, authorizations, and related entities. It supports multiple
+// database backends (SQLite, PostgreSQL) through a common interface.
+//
+// Implementations must be safe for concurrent use and support atomic transactions
+// for batch operations.
 package database
 
 import (
@@ -6,17 +14,51 @@ import (
 	"git.ri.se/eu-cop-pilot/arrowhead-lite/pkg"
 )
 
+// Database provides persistent storage for Arrowhead core system data.
+//
+// All implementations must be safe for concurrent use by multiple goroutines
+// and support atomic batch operations. Methods return pkg.AppError types for
+// consistent error handling across the application.
 type Database interface {
 	// System operations
 
+	// CreateSystem persists a new system registration.
+	// Returns an error if a system with the same name/address/port already exists.
+	// The system's ID field will be populated with the database-assigned identifier.
 	CreateSystem(system *pkg.System) error
+
+	// CreateSystemsBatch atomically creates multiple systems in a single transaction.
+	// All systems succeed together or all fail together.
+	// System IDs are populated on success.
 	CreateSystemsBatch(systems []*pkg.System) error
+
+	// GetSystemByID retrieves a system by its database ID.
+	// Returns nil with no error if the system is not found.
 	GetSystemByID(id int) (*pkg.System, error)
+
+	// GetSystemByName retrieves a system by its unique name.
+	// Returns nil with no error if the system is not found.
 	GetSystemByName(systemName string) (*pkg.System, error)
+
+	// GetSystemByParams retrieves a system by its network parameters.
+	// Returns nil with no error if no matching system exists.
 	GetSystemByParams(systemName, address string, port int) (*pkg.System, error)
+
+	// UpdateSystem updates an existing system's fields.
+	// Returns an error if the system does not exist.
 	UpdateSystem(system *pkg.System) error
+
+	// DeleteSystemByID removes a system and all its associated services.
+	// Returns an error if the system does not exist.
 	DeleteSystemByID(id int) error
+
+	// DeleteSystemByParams removes a system identified by network parameters.
+	// Returns an error if the system does not exist.
 	DeleteSystemByParams(systemName, address string, port int) error
+
+	// ListSystems retrieves all registered systems with optional sorting.
+	// sortField can be "id", "system_name", "created_at", etc.
+	// direction must be "ASC" or "DESC".
 	ListSystems(sortField, direction string) ([]pkg.System, error)
 
 	// Service operations

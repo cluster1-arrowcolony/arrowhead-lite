@@ -1,3 +1,9 @@
+// Package internal provides configuration management for Arrowhead Lite.
+//
+// This package handles loading and validation of application configuration from
+// multiple sources (YAML files, environment variables, and command-line flags)
+// using Viper. Configuration includes server settings, database configuration,
+// authentication parameters, and logging options.
 package internal
 
 import (

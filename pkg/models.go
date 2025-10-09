@@ -1,28 +1,40 @@
+// Package pkg provides Arrowhead Framework 4.x compatible data models and types.
+//
+// This package defines the core domain models used across the Arrowhead IoT service mesh,
+// including system registration, service discovery, authorization, and orchestration.
+// All types are designed for JSON serialization and conform to the Arrowhead 4.x REST API specification.
 package pkg
 
 import (
 	"time"
 )
 
-// A system registration request
+// SystemRegistration represents a request to register a new IoT system with the
+// Arrowhead service registry. Systems must register before they can provide or
+// consume services in the local cloud.
+//
+// The AuthenticationInfo field should contain a certificate thumbprint (SHA-256)
+// when using mTLS authentication in production mode.
 type SystemRegistration struct {
-	SystemName         string            `json:"systemName"`
-	Address            string            `json:"address"`
-	Port               int               `json:"port"`
-	AuthenticationInfo string            `json:"authenticationInfo"`
-	Metadata           map[string]string `json:"metadata,omitempty"`
+	SystemName         string            `json:"systemName"`         // Unique identifier for the system
+	Address            string            `json:"address"`            // IP address or hostname
+	Port               int               `json:"port"`               // Port number where the system is accessible
+	AuthenticationInfo string            `json:"authenticationInfo"` // Certificate thumbprint for mTLS or empty for dev mode
+	Metadata           map[string]string `json:"metadata,omitempty"` // Optional key-value metadata
 }
 
-// An Arrowhead system
+// System represents a registered IoT system in the Arrowhead local cloud.
+// Systems are the fundamental entities that provide and consume services.
+// This type is returned by the Service Registry after successful registration.
 type System struct {
-	ID                 int               `json:"id"`
-	SystemName         string            `json:"systemName"`
-	Address            string            `json:"address"`
-	Port               int               `json:"port"`
-	AuthenticationInfo string            `json:"authenticationInfo,omitempty"`
-	CreatedAt          *time.Time        `json:"createdAt,omitempty"`
-	UpdatedAt          *time.Time        `json:"updatedAt,omitempty"`
-	Metadata           map[string]string `json:"metadata,omitempty"`
+	ID                 int               `json:"id"`                           // Database-assigned unique identifier
+	SystemName         string            `json:"systemName"`                   // Unique name of the system
+	Address            string            `json:"address"`                      // IP address or hostname
+	Port               int               `json:"port"`                         // Port number
+	AuthenticationInfo string            `json:"authenticationInfo,omitempty"` // Certificate thumbprint for mTLS
+	CreatedAt          *time.Time        `json:"createdAt,omitempty"`          // Timestamp of initial registration
+	UpdatedAt          *time.Time        `json:"updatedAt,omitempty"`          // Timestamp of last update
+	Metadata           map[string]string `json:"metadata,omitempty"`           // Custom key-value metadata
 }
 
 // A paginated response of systems
@@ -69,16 +81,21 @@ type ProviderSystem struct {
 	Metadata           map[string]string `json:"metadata,omitempty"`
 }
 
-// A service registration request
+// ServiceRegistrationRequest represents a request to register a service with the
+// Arrowhead service registry. Services define capabilities that provider systems
+// offer to consumer systems.
+//
+// The Secure field should be "TOKEN", "CERTIFICATE", or "NOT_SECURE".
+// The EndOfValidity field uses RFC3339 format (e.g., "2024-12-31T23:59:59Z").
 type ServiceRegistrationRequest struct {
-	ServiceDefinition string            `json:"serviceDefinition"`
-	ProviderSystem    ProviderSystem    `json:"providerSystem"`
-	ServiceUri        string            `json:"serviceUri"`
-	EndOfValidity     string            `json:"endOfValidity"`
-	Secure            string            `json:"secure"`
-	Metadata          map[string]string `json:"metadata,omitempty"`
-	Version           string            `json:"version"`
-	Interfaces        []string          `json:"interfaces"`
+	ServiceDefinition string            `json:"serviceDefinition"`  // Name of the service (e.g., "temperature-sensor")
+	ProviderSystem    ProviderSystem    `json:"providerSystem"`     // System providing this service
+	ServiceUri        string            `json:"serviceUri"`         // URI path for accessing the service
+	EndOfValidity     string            `json:"endOfValidity"`      // Optional expiration time in RFC3339 format
+	Secure            string            `json:"secure"`             // Security type: TOKEN, CERTIFICATE, or NOT_SECURE
+	Metadata          map[string]string `json:"metadata,omitempty"` // Optional service metadata
+	Version           string            `json:"version"`            // Service version number
+	Interfaces        []string          `json:"interfaces"`         // Supported interfaces (e.g., "HTTP-SECURE-JSON")
 }
 
 // A registered service
@@ -178,15 +195,24 @@ type RequestedService struct {
 	PingProviders                bool              `json:"pingProviders"`
 }
 
-// A request for service orchestration
+// OrchestrationRequest represents a request for service orchestration.
+// Consumer systems use this to discover and get recommendations for service providers
+// that match their requirements.
+//
+// The orchestrator will:
+//  1. Find services matching the ServiceDefinitionRequirement
+//  2. Filter by interface, security, and version requirements
+//  3. Check authorization rules
+//  4. Apply preferred providers and QoS filtering
+//  5. Return ranked service recommendations with authorization tokens
 type OrchestrationRequest struct {
-	RequesterSystem    RequesterSystem     `json:"requesterSystem"`
-	RequestedService   RequestedService    `json:"requestedService"`
-	OrchestrationFlags OrchestrationFlags  `json:"orchestrationFlags"`
-	PreferredProviders []PreferredProvider `json:"preferredProviders,omitempty"`
-	RequesterCloud     *Cloud              `json:"requesterCloud,omitempty"`
-	QoSRequirements    map[string]string   `json:"qosRequirements,omitempty"`
-	Commands           map[string]string   `json:"commands,omitempty"`
+	RequesterSystem    RequesterSystem     `json:"requesterSystem"`              // System requesting orchestration
+	RequestedService   RequestedService    `json:"requestedService"`             // Service requirements and filters
+	OrchestrationFlags OrchestrationFlags  `json:"orchestrationFlags"`           // Behavioral flags
+	PreferredProviders []PreferredProvider `json:"preferredProviders,omitempty"` // Preferred service providers (ranked)
+	RequesterCloud     *Cloud              `json:"requesterCloud,omitempty"`     // Cloud information (for inter-cloud)
+	QoSRequirements    map[string]string   `json:"qosRequirements,omitempty"`    // Quality of Service requirements
+	Commands           map[string]string   `json:"commands,omitempty"`           // Custom orchestration commands
 }
 
 // A service matched during orchestration

@@ -1,3 +1,25 @@
+// Package orchestration implements the Arrowhead Orchestrator core system.
+//
+// The Orchestrator provides dynamic service matching and provider recommendations
+// for consumer systems within an Arrowhead local cloud. It implements the
+// Arrowhead Framework 4.x Orchestrator specification.
+//
+// Key responsibilities:
+//   - Service discovery and matching based on consumer requirements
+//   - Provider ranking using preferred providers and QoS requirements
+//   - Authorization-aware service filtering
+//   - Metadata-based service selection
+//   - Authorization token generation for matched services
+//
+// The orchestration process filters and ranks services based on:
+//   - Service definition matching
+//   - Interface compatibility
+//   - Security requirements
+//   - Version constraints
+//   - Authorization rules
+//   - Preferred providers
+//   - QoS requirements
+//   - Metadata matching
 package orchestration
 
 import (
@@ -14,12 +36,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// Orchestrator implements service discovery and matching for consumer systems.
+// It filters and ranks available services based on consumer requirements.
 type Orchestrator struct {
 	db          database.Database
 	authManager *auth.AuthManager
 	logger      *logrus.Logger
 }
 
+// NewOrchestrator creates a new Orchestrator instance with the provided dependencies.
+// The orchestrator is immediately ready to handle orchestration requests.
 func NewOrchestrator(db database.Database, authManager *auth.AuthManager, logger *logrus.Logger) *Orchestrator {
 	return &Orchestrator{
 		db:          db,
@@ -28,7 +54,21 @@ func NewOrchestrator(db database.Database, authManager *auth.AuthManager, logger
 	}
 }
 
-// Handle an orchestration request
+// Orchestrate processes an orchestration request and returns matching services.
+//
+// The orchestration process:
+//  1. Finds all services matching the service definition requirement
+//  2. Filters by interface, security, and version requirements
+//  3. Checks authorization rules (consumer must be authorized)
+//  4. Applies orchestration flags (e.g., onlyPreferred)
+//  5. Ranks results using preferred providers
+//  6. Applies QoS and metadata filtering
+//  7. Generates authorization tokens for matched services
+//
+// Returns an OrchestrationResponse containing ranked service recommendations
+// with authorization tokens for each interface.
+//
+// Returns pkg.InternalServerError if service discovery or matching fails.
 func (o *Orchestrator) Orchestrate(req *pkg.OrchestrationRequest) (*pkg.OrchestrationResponse, error) {
 	o.logger.WithFields(logrus.Fields{
 		"requester_system": req.RequesterSystem.SystemName,

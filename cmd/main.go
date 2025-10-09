@@ -1,3 +1,27 @@
+// Package main is the entry point for the Arrowhead Lite application.
+//
+// Arrowhead Lite is a lightweight, single-binary implementation of the Arrowhead Framework 4.x
+// specification for IoT service mesh deployments. It consolidates the Service Registry,
+// Authorization, and Orchestration core systems into a unified application.
+//
+// The application supports both development (HTTP) and production (HTTPS with mTLS) modes,
+// configurable databases (SQLite, PostgreSQL), and provides REST APIs compatible with the
+// Arrowhead Framework 4.x specification.
+//
+// Usage:
+//
+//	arrowhead-lite [flags]
+//
+// Flags:
+//
+//	--quiet     Disable all logging output
+//	--verbose   Enable verbose debug logging
+//	--clean     Start with a clean database (removes existing SQLite database)
+//
+// Configuration:
+//
+// Set ARROWHEAD_CONFIG environment variable to specify a YAML configuration file path.
+// See docs/OPERATIONS_GUIDE.md for complete configuration options.
 package main
 
 import (

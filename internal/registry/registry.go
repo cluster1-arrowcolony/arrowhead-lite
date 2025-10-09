@@ -1,3 +1,14 @@
+// Package registry implements the Arrowhead Service Registry core system.
+//
+// The Service Registry manages the registration and discovery of IoT systems and services
+// within an Arrowhead local cloud. It provides the central directory for systems to find
+// and consume services, implementing the Arrowhead Framework 4.x Service Registry specification.
+//
+// Key responsibilities:
+//   - System lifecycle management (registration, updates, deregistration)
+//   - Service publication and discovery
+//   - Authorization rule management
+//   - Service metadata and interface tracking
 package registry
 
 import (
@@ -10,11 +21,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// Registry implements the Arrowhead Service Registry core system.
+// It manages the lifecycle of systems and services within the local cloud.
 type Registry struct {
 	db     database.Database
 	logger *logrus.Logger
 }
 
+// NewRegistry creates a new Service Registry instance with the provided database
+// and logger. The registry is immediately ready to handle registration and
+// discovery requests.
 func NewRegistry(db database.Database, logger *logrus.Logger) *Registry {
 	return &Registry{
 		db:     db,
@@ -24,7 +40,13 @@ func NewRegistry(db database.Database, logger *logrus.Logger) *Registry {
 
 // System Management Methods
 
-// Register multiple systems in a single transaction
+// RegisterSystemsBatch registers multiple systems atomically in a single transaction.
+// If a system with the same name/address/port already exists, it will be updated instead.
+// All registrations succeed together or all fail together.
+//
+// Returns a slice of created/updated System records with assigned IDs and timestamps.
+//
+// Returns pkg.DatabaseError if the database operation fails.
 func (r *Registry) RegisterSystemsBatch(reqs []pkg.SystemRegistration) ([]pkg.System, error) {
 	r.logger.Infof("Registering batch of %d systems", len(reqs))
 	systemsToCreate := make([]*pkg.System, 0, len(reqs))
@@ -80,7 +102,15 @@ func (r *Registry) RegisterSystemsBatch(reqs []pkg.SystemRegistration) ([]pkg.Sy
 	return resultSystems, nil
 }
 
-// Register a new system in the registry by wrapping the batch call
+// RegisterSystem registers a single system with the Service Registry.
+// This is a convenience wrapper around RegisterSystemsBatch for single system registration.
+//
+// If a system with the same name/address/port already exists, it will be updated.
+//
+// Returns the created or updated System with ID and timestamps populated.
+//
+// Returns pkg.ConflictError if registration failed.
+// Returns pkg.DatabaseError if the database operation fails.
 func (r *Registry) RegisterSystem(req *pkg.SystemRegistration) (*pkg.System, error) {
 	results, err := r.RegisterSystemsBatch([]pkg.SystemRegistration{*req})
 	if err != nil {
