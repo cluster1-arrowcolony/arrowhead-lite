@@ -24,44 +24,48 @@ Arrowhead Lite is a lightweight, single-binary implementation of the Arrowhead F
 ## Component Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Client Applications                     │
-│                    (IoT Devices, Services)                   │
-└─────────────────────────────────────────────────────────────┘
-                                │
-                    ┌───────────┴───────────┐
-                    │   REST API (Gin)      │
-                    │  HTTP/HTTPS + mTLS     │
-                    └───────────┬───────────┘
-                                │
-        ┌───────────────────────┴───────────────────────┐
-        │           Authentication Middleware            │
-        │         (Certificate + JWT Validation)         │
-        └───────────────────────┬───────────────────────┘
-                                │
-    ┌───────────────────────────┴───────────────────────────┐
-    │                    API Handlers Layer                   │
-    ├──────────┬──────────┬──────────┬──────────┬──────────┤
-    │ Registry │   Auth   │  Orch    │    CA    │  Health  │
-    │ Handlers │ Handlers │ Handlers │ Handlers │  Check   │
-    └──────────┴──────────┴──────────┴──────────┴──────────┘
-                                │
-    ┌───────────────────────────┴───────────────────────────┐
-    │                  Core Services Layer                    │
-    ├──────────┬──────────┬──────────┬──────────┬──────────┤
-    │ Service  │  Auth    │  Orch    │   Cert   │  Event   │
-    │ Registry │  Service │  Service │    CA    │   Bus    │
-    └──────────┴──────────┴──────────┴──────────┴──────────┘
-                                │
-    ┌───────────────────────────┴───────────────────────────┐
-    │                   Storage Layer                         │
-    │              (Database Interface + Models)              │
-    └───────────────────────┬───────────────────────────────┘
-                            │
-                ┌───────────┴───────────┐
-                │   Database Backend     │
-                │  SQLite / PostgreSQL   │
-                └───────────────────────┘
++-------------------------------------------------------------+
+|                    Client Applications                      |
+|                  (IoT Devices, Services)                    |
++-------------------------------------------------------------+
+                              |
+                              v
++-------------------------------------------------------------+
+|                    REST API (Gin)                           |
+|                   HTTP/HTTPS + mTLS                         |
++-------------------------------------------------------------+
+                              |
+                              v
++-------------------------------------------------------------+
+|              Authentication Middleware                      |
+|            (Certificate + JWT Validation)                   |
++-------------------------------------------------------------+
+                              |
+                              v
++-------------------------------------------------------------+
+|                   API Handlers Layer                        |
+|                                                             |
+| [Registry] [Auth] [Orch] [CA] [Health]                     |
++-------------------------------------------------------------+
+                              |
+                              v
++-------------------------------------------------------------+
+|                  Core Services Layer                        |
+|                                                             |
+| [Service Registry] [Auth Service] [Orch Service] [Cert CA] |
++-------------------------------------------------------------+
+                              |
+                              v
++-------------------------------------------------------------+
+|                   Storage Layer                             |
+|              (Database Interface + Models)                  |
++-------------------------------------------------------------+
+                              |
+                              v
++-------------------------------------------------------------+
+|                  Database Backend                           |
+|                 SQLite / PostgreSQL                         |
++-------------------------------------------------------------+
 ```
 
 **Visual Diagrams**: For detailed sequence diagrams showing system interactions, see [diagrams/README.md](./diagrams/README.md)
@@ -281,48 +285,47 @@ Arrowhead 4.x compatible data structures:
 
 ### Single Node Deployment
 ```
-┌─────────────────────┐
-│   Arrowhead Lite    │
-│  ┌───────────────┐  │
-│  │   SQLite DB   │  │
-│  └───────────────┘  │
-│  ┌───────────────┐  │
-│  │  All Services │  │
-│  └───────────────┘  │
-└─────────────────────┘
++---------------------+
+|   Arrowhead Lite    |
+|                     |
+|   [SQLite DB]       |
+|   [All Services]    |
++---------------------+
 ```
 
 ### Clustered Deployment
 ```
-┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│ Arrowhead    │  │ Arrowhead    │  │ Arrowhead    │
-│ Lite Node 1  │  │ Lite Node 2  │  │ Lite Node 3  │
-└──────┬───────┘  └──────┬───────┘  └──────┬───────┘
-       │                 │                 │
-       └─────────────────┼─────────────────┘
-                         │
-                ┌────────┴────────┐
-                │   PostgreSQL    │
-                │    Cluster      │
-                └─────────────────┘
++-------------+  +-------------+  +-------------+
+| Arrowhead   |  | Arrowhead   |  | Arrowhead   |
+| Lite Node 1 |  | Lite Node 2 |  | Lite Node 3 |
++------+------+  +------+------+  +------+------+
+       |                |                |
+       +----------------+----------------+
+                        |
+                        v
+                +--------------+
+                | PostgreSQL   |
+                |   Cluster    |
+                +--------------+
 ```
 
 ### Edge Deployment
 ```
-        ┌─────────────────┐
-        │   Cloud Core    │
-        │  (PostgreSQL)   │
-        └────────┬────────┘
-                 │
-    ┌────────────┼────────────┐
-    │            │            │
-┌───┴───┐  ┌────┴───┐  ┌────┴───┐
-│ Edge  │  │  Edge  │  │  Edge  │
-│ Node  │  │  Node  │  │  Node  │
-│(SQLite)  │(SQLite)│  │(SQLite)│
-└───┬───┘  └────┬───┘  └────┬───┘
-    │           │            │
- Devices     Devices      Devices
+                +---------------+
+                |  Cloud Core   |
+                | (PostgreSQL)  |
+                +-------+-------+
+                        |
+          +-------------+-------------+
+          |             |             |
+          v             v             v
+     +--------+    +--------+    +--------+
+     | Edge   |    | Edge   |    | Edge   |
+     | Node   |    | Node   |    | Node   |
+     |(SQLite)|    |(SQLite)|    |(SQLite)|
+     +----+---+    +----+---+    +----+---+
+          |             |             |
+       Devices       Devices       Devices
 ```
 
 ## Performance Considerations

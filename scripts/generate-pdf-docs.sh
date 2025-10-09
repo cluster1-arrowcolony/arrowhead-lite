@@ -79,11 +79,12 @@ header-includes: |
   \fancyfoot[C]{}
   \usepackage{listings}
   \lstset{
-    basicstyle=\ttfamily\small,
+    basicstyle=\ttfamily\footnotesize,
     breaklines=true,
     frame=single,
     backgroundcolor=\color{lightgray!10},
-    literate={┌}{+}1 {┐}{+}1 {└}{+}1 {┘}{+}1 {│}{|}1 {─}{-}1 {├}{+}1 {┤}{+}1 {┬}{+}1 {┴}{+}1 {┼}{+}1 {▼}{v}1
+    keepspaces=true,
+    columns=flexible
   }
   \usepackage{pmboxdraw}
 ---
@@ -99,10 +100,11 @@ combine_docs() {
         "README.md"                   # 1. Overview and introduction
         "ARCHITECTURE.md"             # 2. System design and components
         "APPLICATION_DEVELOPMENT.md"  # 3. Using Arrowhead Lite (applications)
-        "OPERATIONS_GUIDE.md"         # 4. Deploying and operating
-        "API_REFERENCE.md"            # 5. Detailed API specification
-        "DEVELOPMENT.md"              # 6. Contributing to the codebase
-        "QUICK_REFERENCE.md"          # 7. Commands and config cheat sheet
+        "COLONYOS_INTEGRATION.md"     # 4. Advanced: Compute orchestration integration
+        "OPERATIONS_GUIDE.md"         # 5. Deploying and operating
+        "API_REFERENCE.md"            # 6. Detailed API specification
+        "DEVELOPMENT.md"              # 7. Contributing to the codebase
+        "QUICK_REFERENCE.md"          # 8. Commands and config cheat sheet
     )
 
     # Diagrams to include
@@ -133,11 +135,12 @@ This PDF is organized into the following sections:
 1. **Overview** - Introduction and getting started
 2. **Architecture** - System design and components (understand the system first)
 3. **Application Development** - For application programmers using Arrowhead Lite
-4. **Operations Guide** - For system administrators deploying Arrowhead Lite
-5. **API Reference** - Complete REST API specification
-6. **Development** - Contributing to the Arrowhead Lite codebase
-7. **Quick Reference** - Command and configuration cheat sheet (handy reference)
-8. **Visual Diagrams** - Sequence diagrams illustrating system interactions
+4. **ColonyOS Integration** - Advanced: Combining with compute orchestration
+5. **Operations Guide** - For system administrators deploying Arrowhead Lite
+6. **API Reference** - Complete REST API specification
+7. **Development** - Contributing to the Arrowhead Lite codebase
+8. **Quick Reference** - Command and configuration cheat sheet (handy reference)
+9. **Visual Diagrams** - Sequence diagrams illustrating system interactions
 
 ## Version Information
 
@@ -216,15 +219,17 @@ generate_pdf() {
 
     # Pandoc options
     PANDOC_OPTS=(
-        --from markdown+yaml_metadata_block
+        --from markdown+yaml_metadata_block+fenced_code_blocks
         --to pdf
         --metadata-file="$TEMP_DIR/metadata.yaml"
         --highlight-style=tango
         --standalone
         --verbose
+        --listings
+        -V block-headings
     )
 
-    # Add PDF engine if available
+    # Add PDF engine if available (prefer xelatex for better Unicode support)
     if [ -n "$PDF_ENGINE" ]; then
         PANDOC_OPTS+=(--pdf-engine="$PDF_ENGINE")
     fi
